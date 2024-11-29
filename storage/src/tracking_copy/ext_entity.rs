@@ -9,10 +9,10 @@ use casper_types::{
         handle_payment::ACCUMULATION_PURSE_KEY, SystemEntityType, AUCTION, HANDLE_PAYMENT, MINT,
     },
     AccessRights, Account, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr,
-    ByteCodeHash, CLValue, ContextAccessRights, EntityAddr, EntityKind, EntityVersions,
-    EntryPointAddr, EntryPointValue, EntryPoints, Groups, HashAddr, Key, Package, PackageHash,
-    PackageStatus, Phase, ProtocolVersion, PublicKey, RuntimeFootprint, StoredValue,
-    StoredValueTypeMismatch, TransactionRuntime, URef, U512,
+    ByteCodeHash, CLValue, ContextAccessRights, ContractRuntimeTag, EntityAddr, EntityKind,
+    EntityVersions, EntryPointAddr, EntryPointValue, EntryPoints, Groups, HashAddr, Key, Package,
+    PackageHash, PackageStatus, Phase, ProtocolVersion, PublicKey, RuntimeFootprint, StoredValue,
+    StoredValueTypeMismatch, URef, U512,
 };
 
 use crate::{
@@ -813,7 +813,7 @@ where
                 purse,
                 AssociatedKeys::default(),
                 ActionThresholds::default(),
-                EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+                EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
             );
 
             let entry_points = contract.entry_points().clone();

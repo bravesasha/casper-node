@@ -9,7 +9,8 @@ use casper_execution_engine::{
 };
 use casper_types::{
     ApiError, BlockTime, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion, RuntimeArgs,
-    Transaction, TransactionArgs, TransactionEntryPoint, TransactionTarget, TransactionV1Builder,
+    Transaction, TransactionArgs, TransactionEntryPoint, TransactionSessionRuntimeParams,
+    TransactionTarget, TransactionV1Builder,
 };
 
 const CONTRACT: &str = "do_nothing_stored.wasm";
@@ -43,9 +44,7 @@ fn try_add_contract_version(
     let txn = TransactionV1Builder::new_session(
         is_install_upgrade,
         module_bytes,
-        casper_types::TransactionRuntime::VmCasperV1,
-        0,
-        None,
+        TransactionSessionRuntimeParams::VmCasperV1,
     )
     .with_secret_key(&DEFAULT_ACCOUNT_SECRET_KEY)
     .with_chain_name(CHAIN_NAME)

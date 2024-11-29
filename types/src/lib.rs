@@ -88,9 +88,9 @@ pub use access_rights::{
 pub use account::Account;
 #[doc(inline)]
 pub use addressable_entity::{
-    AddressableEntity, AddressableEntityHash, EntityAddr, EntityKind, EntryPoint, EntryPointAccess,
-    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, EntryPoints, Parameter,
-    Parameters, DEFAULT_ENTRY_POINT_NAME,
+    AddressableEntity, AddressableEntityHash, ContractRuntimeTag, EntityAddr, EntityKind,
+    EntryPoint, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
+    EntryPointValue, EntryPoints, Parameter, Parameters, DEFAULT_ENTRY_POINT_NAME,
 };
 #[doc(inline)]
 pub use api_error::ApiError;
@@ -197,9 +197,9 @@ pub use transaction::{
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, NamedArg, PackageIdentifier,
     PricingMode, PricingModeError, RuntimeArgs, Transaction, TransactionArgs,
     TransactionEntryPoint, TransactionHash, TransactionId, TransactionInvocationTarget,
-    TransactionRuntime, TransactionScheduling, TransactionTarget, TransactionV1,
-    TransactionV1DecodeFromJsonError, TransactionV1Error, TransactionV1ExcessiveSizeError,
-    TransactionV1Hash, TransactionV1Payload, TransferTarget,
+    TransactionScheduling, TransactionSessionRuntimeParams, TransactionStoredRuntimeParams,
+    TransactionTarget, TransactionV1, TransactionV1DecodeFromJsonError, TransactionV1Error,
+    TransactionV1ExcessiveSizeError, TransactionV1Hash, TransactionV1Payload, TransferTarget,
 };
 #[cfg(any(feature = "std", test))]
 pub use transaction::{

@@ -1,9 +1,10 @@
 use super::transaction_lane::{calculate_transaction_lane, TransactionLane};
 use casper_types::{
-    arg_handling, bytesrepr::ToBytes, crypto, Approval, Chainspec, Digest, DisplayIter, Gas,
-    HashAddr, InitiatorAddr, InvalidTransaction, InvalidTransactionV1, PricingHandling,
-    PricingMode, TimeDiff, Timestamp, TransactionArgs, TransactionConfig, TransactionEntryPoint,
-    TransactionRuntime, TransactionScheduling, TransactionTarget, TransactionV1,
+    arg_handling, bytesrepr::ToBytes, crypto, Approval, Chainspec, ContractRuntimeTag, Digest,
+    DisplayIter, Gas, HashAddr, InitiatorAddr, InvalidTransaction, InvalidTransactionV1,
+    PricingHandling, PricingMode, TimeDiff, Timestamp, TransactionArgs, TransactionConfig,
+    TransactionEntryPoint, TransactionScheduling, TransactionSessionRuntimeParams,
+    TransactionStoredRuntimeParams, TransactionTarget, TransactionV1,
     TransactionV1ExcessiveSizeError, TransactionV1Hash, U512,
 };
 use core::fmt::{self, Debug, Display, Formatter};
@@ -109,12 +110,25 @@ impl MetaTransactionV1 {
     }
 
     pub(crate) fn is_v2_wasm(&self) -> bool {
-        match self.target {
+        match &self.target {
             TransactionTarget::Native => false,
-            TransactionTarget::Stored { runtime, .. }
-            | TransactionTarget::Session { runtime, .. } => {
-                matches!(runtime, TransactionRuntime::VmCasperV2)
-                    && (!self.is_native_mint() && !self.is_native_auction())
+            TransactionTarget::Stored {
+                runtime: stored_runtime,
+                ..
+            } => {
+                matches!(
+                    stored_runtime,
+                    TransactionStoredRuntimeParams::VmCasperV2 { .. }
+                ) && (!self.is_native_mint() && !self.is_native_auction())
+            }
+            TransactionTarget::Session {
+                runtime: session_runtime,
+                ..
+            } => {
+                matches!(
+                    session_runtime,
+                    TransactionSessionRuntimeParams::VmCasperV2 { .. }
+                ) && (!self.is_native_mint() && !self.is_native_auction())
             }
         }
     }
@@ -278,11 +292,11 @@ impl MetaTransactionV1 {
         self.ttl
     }
     /// Returns the scheduling of the transaction.
-    pub(crate) fn transaction_runtime(&self) -> Option<TransactionRuntime> {
-        match self.target {
+    pub(crate) fn contract_runtime_tag(&self) -> Option<ContractRuntimeTag> {
+        match &self.target {
             TransactionTarget::Native => None,
-            TransactionTarget::Stored { runtime, .. } => Some(runtime),
-            TransactionTarget::Session { runtime, .. } => Some(runtime),
+            TransactionTarget::Stored { runtime, .. } => Some(runtime.contract_runtime_tag()),
+            TransactionTarget::Session { runtime, .. } => Some(runtime.contract_runtime_tag()),
         }
     }
 
@@ -297,8 +311,8 @@ impl MetaTransactionV1 {
     ) -> Result<(), InvalidTransactionV1> {
         let transaction_config = chainspec.transaction_config.clone();
 
-        match self.transaction_runtime() {
-            Some(expected_runtime @ TransactionRuntime::VmCasperV1) => {
+        match self.contract_runtime_tag() {
+            Some(expected_runtime @ ContractRuntimeTag::VmCasperV1) => {
                 if !transaction_config.runtime_config.vm_casper_v1 {
                     // NOTE: In current implementation native transactions should be executed on
                     // both VmCasperV1 and VmCasperV2. This may change once we
@@ -310,7 +324,7 @@ impl MetaTransactionV1 {
                     });
                 }
             }
-            Some(expected_runtime @ TransactionRuntime::VmCasperV2) => {
+            Some(expected_runtime @ ContractRuntimeTag::VmCasperV2) => {
                 if !transaction_config.runtime_config.vm_casper_v2 {
                     // NOTE: In current implementation native transactions should be executed on
                     // both VmCasperV1 and VmCasperV2. This may change once we
@@ -638,18 +652,12 @@ impl MetaTransactionV1 {
     pub(crate) fn seed(&self) -> Option<[u8; 32]> {
         match &self.target {
             TransactionTarget::Native => None,
-            TransactionTarget::Stored {
-                id: _,
-                runtime: _,
-                transferred_value: _,
-            } => None,
+            TransactionTarget::Stored { id: _, runtime: _ } => None,
             TransactionTarget::Session {
                 is_install_upgrade: _,
-                runtime: _,
+                runtime,
                 module_bytes: _,
-                transferred_value: _,
-                seed,
-            } => *seed,
+            } => runtime.seed(),
         }
     }
 
@@ -657,18 +665,23 @@ impl MetaTransactionV1 {
     pub fn transferred_value(&self) -> u64 {
         match &self.target {
             TransactionTarget::Native => 0,
-            TransactionTarget::Stored {
-                id: _,
-                runtime: _,
-                transferred_value,
-            } => *transferred_value,
+            TransactionTarget::Stored { id: _, runtime } => match runtime {
+                TransactionStoredRuntimeParams::VmCasperV1 => 0,
+                TransactionStoredRuntimeParams::VmCasperV2 { transferred_value } => {
+                    *transferred_value
+                }
+            },
             TransactionTarget::Session {
                 is_install_upgrade: _,
-                runtime: _,
+                runtime,
                 module_bytes: _,
-                transferred_value,
-                seed: _,
-            } => *transferred_value,
+            } => match runtime {
+                TransactionSessionRuntimeParams::VmCasperV1 => 0,
+                TransactionSessionRuntimeParams::VmCasperV2 {
+                    transferred_value,
+                    seed: _,
+                } => *transferred_value,
+            },
         }
     }
 }

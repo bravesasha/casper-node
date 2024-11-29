@@ -18,7 +18,7 @@ use crate::{
     },
     addressable_entity::{
         action_thresholds::gens::action_thresholds_arb, associated_keys::gens::associated_keys_arb,
-        MessageTopics, NamedKeyAddr, NamedKeyValue, Parameters, Weight,
+        ContractRuntimeTag, MessageTopics, NamedKeyAddr, NamedKeyValue, Parameters, Weight,
     },
     block::BlockGlobalAddr,
     byte_code::ByteCodeKind,
@@ -47,7 +47,7 @@ use crate::{
     },
     transaction::{
         gens::deploy_hash_arb, FieldsContainer, InitiatorAddrAndSecretKey, TransactionArgs,
-        TransactionV1Payload,
+        TransactionSessionRuntimeParams, TransactionStoredRuntimeParams, TransactionV1Payload,
     },
     transfer::{
         gens::{transfer_v1_addr_arb, transfer_v1_arb},
@@ -58,8 +58,8 @@ use crate::{
     EntryPointPayment, EntryPointType, EntryPoints, EraId, Group, InitiatorAddr, Key, NamedArg,
     Package, Parameter, Phase, PricingMode, ProtocolVersion, PublicKey, RuntimeArgs, SemVer,
     StoredValue, TimeDiff, Timestamp, Transaction, TransactionEntryPoint,
-    TransactionInvocationTarget, TransactionRuntime, TransactionScheduling, TransactionTarget,
-    TransactionV1, URef, U128, U256, U512,
+    TransactionInvocationTarget, TransactionScheduling, TransactionTarget, TransactionV1, URef,
+    U128, U256, U512,
 };
 use proptest::{
     array, bits, bool,
@@ -627,10 +627,10 @@ pub fn system_entity_type_arb() -> impl Strategy<Value = SystemEntityType> {
     ]
 }
 
-pub fn transaction_runtime_arb() -> impl Strategy<Value = TransactionRuntime> {
+pub fn contract_runtime_arb() -> impl Strategy<Value = ContractRuntimeTag> {
     prop_oneof![
-        Just(TransactionRuntime::VmCasperV1),
-        Just(TransactionRuntime::VmCasperV2),
+        Just(ContractRuntimeTag::VmCasperV1),
+        Just(ContractRuntimeTag::VmCasperV2),
     ]
 }
 
@@ -638,7 +638,7 @@ pub fn entity_kind_arb() -> impl Strategy<Value = EntityKind> {
     prop_oneof![
         system_entity_type_arb().prop_map(EntityKind::System),
         account_hash_arb().prop_map(EntityKind::Account),
-        transaction_runtime_arb().prop_map(EntityKind::SmartContract),
+        contract_runtime_arb().prop_map(EntityKind::SmartContract),
     ]
 }
 
@@ -1108,25 +1108,55 @@ pub fn transaction_invocation_target_arb() -> impl Strategy<Value = TransactionI
 pub fn stored_transaction_target() -> impl Strategy<Value = TransactionTarget> {
     (
         transaction_invocation_target_arb(),
-        transaction_runtime_arb(),
-        any::<u64>(),
+        transaction_stored_runtime_params_arb(),
     )
-        .prop_map(|(target, runtime, transferred_value)| {
-            TransactionTarget::new_stored(target, runtime, transferred_value)
-        })
+        .prop_map(|(id, runtime)| TransactionTarget::Stored { id, runtime })
+}
+
+fn transferred_value_arb() -> impl Strategy<Value = u64> {
+    any::<u64>()
+}
+
+fn seed_arb() -> impl Strategy<Value = Option<[u8; 32]>> {
+    option::of(array::uniform32(any::<u8>()))
 }
 
 pub fn session_transaction_target() -> impl Strategy<Value = TransactionTarget> {
     (
         any::<bool>(),
         Just(Bytes::from(vec![1; 10])),
-        transaction_runtime_arb(),
-        any::<u64>(),
-        any::<Option<[u8; 32]>>(),
+        transaction_session_runtime_params_arb(),
     )
-        .prop_map(|(target, module_bytes, runtime, transferred_value, seed)| {
-            TransactionTarget::new_session(target, module_bytes, runtime, transferred_value, seed)
+        .prop_map(
+            |(is_install_upgrade, module_bytes, runtime)| TransactionTarget::Session {
+                is_install_upgrade,
+                module_bytes,
+                runtime,
+            },
+        )
+}
+
+pub(crate) fn transaction_stored_runtime_params_arb(
+) -> impl Strategy<Value = TransactionStoredRuntimeParams> {
+    prop_oneof![
+        Just(TransactionStoredRuntimeParams::VmCasperV1),
+        transferred_value_arb().prop_map(|transferred_value| {
+            TransactionStoredRuntimeParams::VmCasperV2 { transferred_value }
+        }),
+    ]
+}
+
+pub(crate) fn transaction_session_runtime_params_arb(
+) -> impl Strategy<Value = TransactionSessionRuntimeParams> {
+    prop_oneof![
+        Just(TransactionSessionRuntimeParams::VmCasperV1),
+        (transferred_value_arb(), seed_arb()).prop_map(|(transferred_value, seed)| {
+            TransactionSessionRuntimeParams::VmCasperV2 {
+                transferred_value,
+                seed,
+            }
         })
+    ]
 }
 
 pub fn transaction_target_arb() -> impl Strategy<Value = TransactionTarget> {
@@ -1134,34 +1164,21 @@ pub fn transaction_target_arb() -> impl Strategy<Value = TransactionTarget> {
         Just(TransactionTarget::Native),
         (
             transaction_invocation_target_arb(),
-            transaction_runtime_arb(),
-            any::<u64>(),
+            transaction_stored_runtime_params_arb(),
         )
-            .prop_map(
-                |(target, runtime, transferred_value)| TransactionTarget::new_stored(
-                    target,
-                    runtime,
-                    transferred_value
-                )
-            ),
+            .prop_map(|(id, runtime)| TransactionTarget::Stored { id, runtime }),
         (
             any::<bool>(),
             Just(Bytes::from(vec![1; 10])),
-            transaction_runtime_arb(),
-            any::<u64>(),
-            any::<Option<[u8; 32]>>(),
+            transaction_session_runtime_params_arb(),
         )
-            .prop_map(
-                |(is_install_upgrade, module_bytes, runtime, transferred_value, seed)| {
-                    TransactionTarget::new_session(
-                        is_install_upgrade,
-                        module_bytes,
-                        runtime,
-                        transferred_value,
-                        seed,
-                    )
+            .prop_map(|(is_install_upgrade, module_bytes, runtime)| {
+                TransactionTarget::Session {
+                    is_install_upgrade,
+                    module_bytes,
+                    runtime,
                 }
-            )
+            })
     ]
 }
 

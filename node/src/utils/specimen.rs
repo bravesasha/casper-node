@@ -27,9 +27,9 @@ use casper_types::{
     ExecutableDeployItem, FinalitySignature, FinalitySignatureId, FinalitySignatureV2, PackageHash,
     ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey, SemVer, SignedBlockHeader,
     SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
-    TransactionId, TransactionRuntime, TransactionV1, TransactionV1Builder, TransactionV1Hash,
-    URef, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, LARGE_WASM_LANE_ID,
-    MINT_LANE_ID, U512,
+    TransactionId, TransactionSessionRuntimeParams, TransactionV1, TransactionV1Builder,
+    TransactionV1Hash, URef, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH,
+    LARGE_WASM_LANE_ID, MINT_LANE_ID, U512,
 };
 
 use crate::{
@@ -1020,9 +1020,7 @@ impl LargestSpecimen for TransactionV1 {
                 max_size_with_margin,
                 cache,
             )),
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            TransactionSessionRuntimeParams::VmCasperV1,
         )
         .with_secret_key(&LargestSpecimen::largest_specimen(estimator, cache))
         .with_timestamp(LargestSpecimen::largest_specimen(estimator, cache))

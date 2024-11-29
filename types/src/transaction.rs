@@ -15,7 +15,6 @@ mod transaction_entry_point;
 mod transaction_hash;
 mod transaction_id;
 mod transaction_invocation_target;
-mod transaction_runtime;
 mod transaction_scheduling;
 mod transaction_target;
 mod transaction_v1;
@@ -82,9 +81,10 @@ pub use transaction_entry_point::TransactionEntryPoint;
 pub use transaction_hash::TransactionHash;
 pub use transaction_id::TransactionId;
 pub use transaction_invocation_target::TransactionInvocationTarget;
-pub use transaction_runtime::TransactionRuntime;
 pub use transaction_scheduling::TransactionScheduling;
-pub use transaction_target::TransactionTarget;
+pub use transaction_target::{
+    TransactionSessionRuntimeParams, TransactionStoredRuntimeParams, TransactionTarget,
+};
 #[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) use transaction_v1::fields_container::FieldsContainer;
 pub use transaction_v1::{
