@@ -2471,8 +2471,6 @@ async fn run_rewards_network_scenario(
                     _ => panic!("unexpectedly absent era report"),
                 };
 
-            // TODO: Investigate whether the rewards pay out for the signatures
-            // _in the switch block itself_
             let rewarded_range =
                 previous_switch_block_height as usize + 1..switch_block.height() as usize + 1;
             let rewarded_blocks = &blocks[rewarded_range];
@@ -2527,8 +2525,6 @@ async fn run_rewards_network_scenario(
                 );
 
                 // Recover relevant finality signatures
-                // TODO: Deal with the implicit assumption that lookback only look backs one
-                // previous era
                 block.rewarded_signatures().iter().enumerate().for_each(
                     |(offset, signatures_packed)| {
                         if block.height() as usize - offset - 1
