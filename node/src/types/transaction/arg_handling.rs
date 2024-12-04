@@ -121,7 +121,7 @@ impl<T> OptionalArg<T> {
     where
         T: CLTyped + ToBytes,
     {
-        args.insert(self.name, Some(value))
+        args.insert(self.name, value)
     }
 }
 
@@ -592,7 +592,7 @@ mod tests {
         };
         let expected_error = InvalidTransactionV1::UnexpectedArgType {
             arg_name: TRANSFER_ARG_SOURCE.name.to_string(),
-            expected: vec![Option::<URef>::cl_type()],
+            expected: vec![URef::cl_type()],
             got: CLType::U8,
         };
         assert_eq!(

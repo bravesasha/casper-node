@@ -77,7 +77,7 @@ impl<T> OptionalArg<T> {
     where
         T: CLTyped + ToBytes,
     {
-        args.insert(self.name, Some(value))
+        args.insert(self.name, value)
     }
 }
 
