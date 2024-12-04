@@ -1565,10 +1565,9 @@ where
         match self.query(None, Key::Account(account_hash), &[]).ok() {
             Some(StoredValue::Account(account)) => Some(AddressableEntity::from(account)),
             Some(StoredValue::CLValue(cl_value)) => {
-                let contract_key =
-                    CLValue::into_t::<Key>(cl_value).expect("must have contract hash");
-                match self.query(None, contract_key, &[]) {
-                    Ok(StoredValue::AddressableEntity(contract)) => Some(contract),
+                let entity_key = CLValue::into_t::<Key>(cl_value).expect("must have entity key");
+                match self.query(None, entity_key, &[]) {
+                    Ok(StoredValue::AddressableEntity(entity)) => Some(entity),
                     Ok(_) | Err(_) => None,
                 }
             }
