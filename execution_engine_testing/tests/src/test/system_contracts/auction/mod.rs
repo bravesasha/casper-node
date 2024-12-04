@@ -54,11 +54,11 @@ pub fn get_era_info(builder: &mut LmdbWasmTestBuilder) -> EraInfo {
 #[ignore]
 #[test]
 fn should_support_contract_staking() {
+    const ARG_ACTION: &str = "action";
     let timestamp_millis = DEFAULT_GENESIS_TIMESTAMP_MILLIS;
     let purse_name = "staking_purse".to_string();
     let contract_name = "staking".to_string();
     let entry_point_name = "run".to_string();
-    const ARG_ACTION: &str = "action";
     let stake = "STAKE".to_string();
     let unstake = "UNSTAKE".to_string();
     let restake = "RESTAKE".to_string();
@@ -92,7 +92,10 @@ fn should_support_contract_staking() {
     });
     builder.run_genesis(genesis_request);
 
-    for _ in 0..=builder.get_auction_delay() {
+    let auction_delay = builder.get_unbonding_delay();
+    let unbond_delay = builder.get_unbonding_delay();
+
+    for _ in 0..=auction_delay {
         // crank era
         builder.run_auction(timestamp_millis, vec![]);
     }
@@ -180,10 +183,16 @@ fn should_support_contract_staking() {
         delegator: contract_purse.addr(),
     });
 
-    if let StoredValue::BidKind(BidKind::Delegator(delegator)) = builder
+    let stored_value = builder
         .query(None, delegation_key, &[])
-        .expect("should have delegation bid")
-    {
+        .expect("should have delegation bid");
+
+    assert!(
+        matches!(stored_value, StoredValue::BidKind(BidKind::Delegator(_))),
+        "expected delegator bid"
+    );
+
+    if let StoredValue::BidKind(BidKind::Delegator(delegator)) = stored_value {
         assert_eq!(
             delegator.staked_amount(),
             delegate_amount,
@@ -191,7 +200,7 @@ fn should_support_contract_staking() {
         );
     }
 
-    for _ in 0..=7 {
+    for _ in 0..=auction_delay {
         // crank era
         builder.run_auction(timestamp_millis, vec![]);
     }
@@ -236,7 +245,7 @@ fn should_support_contract_staking() {
         "at this point, unstaked token has not been returned"
     );
 
-    for _ in 0..=7 {
+    for _ in 0..=unbond_delay {
         // crank era
         builder.run_auction(timestamp_millis, vec![]);
     }
@@ -246,10 +255,16 @@ fn should_support_contract_staking() {
         delegator: contract_purse.addr(),
     });
 
-    if let StoredValue::BidKind(BidKind::Delegator(delegator)) = builder
+    let stored_value = builder
         .query(None, delegation_key, &[])
-        .expect("should have delegation bid")
-    {
+        .expect("should have delegation bid");
+
+    assert!(
+        matches!(stored_value, StoredValue::BidKind(BidKind::Delegator(_))),
+        "expected delegator bid"
+    );
+
+    if let StoredValue::BidKind(BidKind::Delegator(delegator)) = stored_value {
         assert_eq!(
             delegator.staked_amount(),
             delegate_amount,
@@ -305,7 +320,7 @@ fn should_support_contract_staking() {
         U512::zero()
     };
 
-    for _ in 0..=7 {
+    for _ in 0..=unbond_delay {
         // crank era
         builder.run_auction(timestamp_millis, vec![]);
     }
