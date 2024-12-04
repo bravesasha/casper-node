@@ -8,8 +8,8 @@ const TRANSFER_ARG_AMOUNT: RequiredArg<U512> = RequiredArg::new("amount");
 
 const TRANSFER_ARG_SOURCE: OptionalArg<URef> = OptionalArg::new("source");
 const TRANSFER_ARG_TARGET: &str = "target";
-
-const TRANSFER_ARG_ID: OptionalArg<u64> = OptionalArg::new("id");
+// "id" for legacy reasons, if the argument is passed it is [Option]
+const TRANSFER_ARG_ID: OptionalArg<Option<u64>> = OptionalArg::new("id");
 
 const ADD_BID_ARG_PUBLIC_KEY: RequiredArg<PublicKey> = RequiredArg::new("public_key");
 const ADD_BID_ARG_DELEGATION_RATE: RequiredArg<u8> = RequiredArg::new("delegation_rate");
@@ -101,8 +101,8 @@ pub(crate) fn new_transfer_args<A: Into<U512>, T: Into<TransferTarget>>(
         TransferTarget::URef(uref) => args.insert(TRANSFER_ARG_TARGET, uref)?,
     }
     TRANSFER_ARG_AMOUNT.insert(&mut args, amount.into())?;
-    if let Some(id) = maybe_id {
-        TRANSFER_ARG_ID.insert(&mut args, id)?;
+    if maybe_id.is_some() {
+        TRANSFER_ARG_ID.insert(&mut args, maybe_id)?;
     }
     Ok(args)
 }
