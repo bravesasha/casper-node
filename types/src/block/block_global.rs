@@ -156,12 +156,9 @@ impl BlockGlobalAddr {
         })?;
 
         // if more tags are added, extend the below logic to handle every case.
-        if tag == BlockGlobalAddrTag::BlockTime {
-            Ok(BlockGlobalAddr::BlockTime)
-        } else if tag == BlockGlobalAddrTag::MessageCount {
-            Ok(BlockGlobalAddr::MessageCount)
-        } else {
-            Err(FromStrError::BlockGlobal("invalid tag".to_string()))
+        match tag {
+            BlockGlobalAddrTag::BlockTime => Ok(BlockGlobalAddr::BlockTime),
+            BlockGlobalAddrTag::MessageCount => Ok(BlockGlobalAddr::MessageCount),
         }
     }
 }
