@@ -753,7 +753,7 @@ where
             | StoredValue::ContractWasm(_)
             | StoredValue::MessageTopic(_)
             | StoredValue::Message(_)
-            | StoredValue::Prepaid(_)
+            | StoredValue::Prepayment(_)
             | StoredValue::EntryPoint(_)
             | StoredValue::RawBytes(_) => Ok(()),
         }
