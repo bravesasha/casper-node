@@ -23,7 +23,7 @@ use casper_types::{
         UnbondEra, UnbondKind, ValidatorBid, ValidatorCredit, ValidatorWeights,
         DELEGATION_RATE_DENOMINATOR,
     },
-    AccessRights, ApiError, EraId, Key, PublicKey, URef, U512,
+    AccessRights, ApiError, EraId, Key, PublicKey, URef, U512, UREF_ADDR_LENGTH,
 };
 
 use self::providers::{AccountProvider, MintProvider, RuntimeProvider, StorageProvider};
@@ -284,6 +284,7 @@ pub trait Auction:
                     return Err(Error::InvalidContext.into());
                 }
                 self.set_main_purse(uref);
+                self.set_remaining_spending_limit(U512::MAX);         
                 uref
             }
         };

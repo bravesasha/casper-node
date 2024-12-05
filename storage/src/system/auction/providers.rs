@@ -122,4 +122,7 @@ pub trait AccountProvider {
 
     /// Set main purse.
     fn set_main_purse(&mut self, purse: URef);
+
+    /// Set the remaining spending limit.
+    fn set_remaining_spending_limit(&mut self, limit: U512);
 }

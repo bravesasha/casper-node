@@ -533,6 +533,12 @@ where
             .borrow_mut()
             .set_main_purse(purse);
     }
+   
+    // Set the remaining spending limit.
+    fn set_remaining_spending_limit(&mut self, amount: U512) {
+        Runtime::context_mut(self)
+            .set_remaining_spending_limit(amount);
+    }
 }
 
 impl<'a, R> Auction for Runtime<'a, R> where

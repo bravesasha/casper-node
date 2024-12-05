@@ -75,6 +75,8 @@ pub fn run() {
         unstake();
     } else if action == *"STAKE".to_string() {
         stake();
+    } else if action == *"STAKE_ALL".to_string() {
+        stake_all();
     } else if action == *"RESTAKE".to_string() {
         restake();
     } else {
@@ -105,6 +107,26 @@ fn stake() {
         None => revert(ApiError::User(StakingError::MissingValidator as u16)),
     };
     let amount: U512 = runtime::get_named_arg(ARG_AMOUNT);
+    let contract_hash = system::get_auction();
+    let args = runtime_args! {
+        auction::ARG_DELEGATOR_PURSE => staking_purse,
+        auction::ARG_VALIDATOR => validator,
+        auction::ARG_AMOUNT => amount,
+    };
+    runtime::call_contract::<U512>(contract_hash, auction::METHOD_DELEGATE, args);
+}
+
+fn stake_all() {
+    let staking_purse = get_uref_with_user_errors(
+        STAKING_PURSE,
+        StakingError::MissingStakingPurse,
+        StakingError::InvalidStakingPurse,
+    );
+    let validator: PublicKey = match runtime::try_get_named_arg(ARG_VALIDATOR) {
+        Some(validator_public_key) => validator_public_key,
+        None => revert(ApiError::User(StakingError::MissingValidator as u16)),
+    };
+    let amount: U512 = system::get_purse_balance(staking_purse).unwrap_or_revert();
     let contract_hash = system::get_auction();
     let args = runtime_args! {
         auction::ARG_DELEGATOR_PURSE => staking_purse,
