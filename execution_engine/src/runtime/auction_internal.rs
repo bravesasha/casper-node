@@ -394,9 +394,17 @@ where
         amount: U512,
         id: Option<u64>,
     ) -> Result<Result<(), mint::Error>, Error> {
-        if !(self.context.validate_uref(&source).is_ok()
-            || self.context.get_initiator() == PublicKey::System.to_account_hash())
-        {
+        let is_main_purse_transfer = self
+            .context
+            .runtime_footprint()
+            .borrow()
+            .main_purse()
+            .expect("didnt have purse")
+            .addr()
+            == source.addr();
+        let has_perms = is_main_purse_transfer
+            || (source.is_writeable() && self.context.validate_uref(&source).is_ok());
+        if !(has_perms || self.context.get_initiator() == PublicKey::System.to_account_hash()) {
             return Err(Error::InvalidCaller);
         }
 
