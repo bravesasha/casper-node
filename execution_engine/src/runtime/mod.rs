@@ -188,11 +188,6 @@ where
         &self.context
     }
 
-    /// Returns the mutable context.
-    pub(crate) fn context_mut(&mut self) -> &mut RuntimeContext<'a, R> {
-        &mut self.context
-    }
-
     fn gas(&mut self, amount: Gas) -> Result<(), ExecError> {
         self.context.charge_gas(amount)
     }

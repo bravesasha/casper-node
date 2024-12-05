@@ -499,10 +499,6 @@ where
     fn set_main_purse(&mut self, purse: URef) {
         self.runtime_footprint_mut().set_main_purse(purse);
     }
-    
-    fn set_remaining_spending_limit(&mut self, limit: U512) {
-        self.set_remaining_spending_limit(limit);
-    }
 }
 
 impl<S> Auction for RuntimeNative<S> where S: StateReader<Key, StoredValue, Error = GlobalStateError>

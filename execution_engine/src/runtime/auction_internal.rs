@@ -394,14 +394,7 @@ where
         amount: U512,
         id: Option<u64>,
     ) -> Result<Result<(), mint::Error>, Error> {
-        if !(self
-            .context
-            .runtime_footprint()
-            .borrow()
-            .main_purse()
-            .expect("didnt have purse")
-            .addr()
-            == source.addr()
+        if !(self.context.validate_uref(&source).is_ok()
             || self.context.get_initiator() == PublicKey::System.to_account_hash())
         {
             return Err(Error::InvalidCaller);
@@ -532,12 +525,6 @@ where
             .runtime_footprint()
             .borrow_mut()
             .set_main_purse(purse);
-    }
-   
-    // Set the remaining spending limit.
-    fn set_remaining_spending_limit(&mut self, amount: U512) {
-        Runtime::context_mut(self)
-            .set_remaining_spending_limit(amount);
     }
 }
 

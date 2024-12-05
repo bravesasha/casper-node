@@ -481,5 +481,7 @@ fn should_not_enforce_max_spending_when_main_purse_not_in_use() {
         builder.run_auction(timestamp_millis, vec![]);
     }
 
-    builder.query(None, delegation_key, &[]).expect("should have delegation bid");
+    builder
+        .query(None, delegation_key, &[])
+        .expect("should have delegation bid");
 }
