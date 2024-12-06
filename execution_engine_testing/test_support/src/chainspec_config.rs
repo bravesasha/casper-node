@@ -191,6 +191,12 @@ impl ChainspecConfig {
         self
     }
 
+    /// Sets the minimum bid amount config option.
+    pub fn with_minimum_bid_amount(mut self, minimum_bid_amount: u64) -> Self {
+        self.core_config.minimum_bid_amount = minimum_bid_amount;
+        self
+    }
+
     /// Sets fee handling config option.
     pub fn with_fee_handling(mut self, fee_handling: FeeHandling) -> Self {
         self.core_config.fee_handling = fee_handling;
@@ -251,6 +257,7 @@ impl ChainspecConfig {
             .with_max_associated_keys(self.core_config.max_associated_keys)
             .with_max_runtime_call_stack_height(self.core_config.max_runtime_call_stack_height)
             .with_minimum_delegation_amount(self.core_config.minimum_delegation_amount)
+            .with_minimum_bid_amount(self.core_config.minimum_bid_amount)
             .with_strict_argument_checking(self.core_config.strict_argument_checking)
             .with_vesting_schedule_period_millis(self.core_config.vesting_schedule_period.millis())
             .with_max_delegators_per_validator(self.core_config.max_delegators_per_validator)
@@ -276,6 +283,7 @@ impl From<ChainspecConfig> for EngineConfig {
                 chainspec_config.core_config.max_runtime_call_stack_height,
             )
             .with_minimum_delegation_amount(chainspec_config.core_config.minimum_delegation_amount)
+            .with_minimum_bid_amount(chainspec_config.core_config.minimum_bid_amount)
             .with_strict_argument_checking(chainspec_config.core_config.strict_argument_checking)
             .with_vesting_schedule_period_millis(
                 chainspec_config

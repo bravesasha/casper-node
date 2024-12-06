@@ -421,6 +421,7 @@ fn should_run_successful_bond_and_unbond_with_release() {
     assert!(unbond.is_validator());
 
     let era = unbond.eras().first().expect("should have era");
+    assert_eq!(*era.amount(), unbond_amount);
     let unbond_era_1 = era.era_of_creation();
     assert_eq!(unbond_era_1, INITIAL_ERA_ID + 1);
 

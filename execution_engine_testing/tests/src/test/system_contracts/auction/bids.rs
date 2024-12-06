@@ -2392,6 +2392,222 @@ fn should_undelegate_delegators_when_validator_fully_unbonds() {
 
 #[ignore]
 #[test]
+fn should_undelegate_delegators_when_validator_unbonds_below_minimum_bid_amount() {
+    const MINIMUM_BID_AMOUNT: u64 = 2;
+    const VALIDATOR_1_REMAINING_BID: u64 = MINIMUM_BID_AMOUNT - 1;
+    const VALIDATOR_1_WITHDRAW_AMOUNT: u64 = VALIDATOR_1_STAKE - VALIDATOR_1_REMAINING_BID;
+
+    let system_fund_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_TRANSFER_TO_ACCOUNT,
+        runtime_args! {
+            ARG_TARGET => *SYSTEM_ADDR,
+            ARG_AMOUNT => U512::from(TRANSFER_AMOUNT)
+        },
+    )
+    .build();
+
+    let validator_1_fund_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_TRANSFER_TO_ACCOUNT,
+        runtime_args! {
+            ARG_TARGET => *VALIDATOR_1_ADDR,
+            ARG_AMOUNT => U512::from(TRANSFER_AMOUNT)
+        },
+    )
+    .build();
+
+    let delegator_1_fund_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_TRANSFER_TO_ACCOUNT,
+        runtime_args! {
+            ARG_TARGET => *DELEGATOR_1_ADDR,
+            ARG_AMOUNT => U512::from(TRANSFER_AMOUNT)
+        },
+    )
+    .build();
+
+    let delegator_2_fund_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_TRANSFER_TO_ACCOUNT,
+        runtime_args! {
+            ARG_TARGET => *DELEGATOR_2_ADDR,
+            ARG_AMOUNT => U512::from(TRANSFER_AMOUNT)
+        },
+    )
+    .build();
+
+    let validator_1_add_bid_request = ExecuteRequestBuilder::standard(
+        *VALIDATOR_1_ADDR,
+        CONTRACT_ADD_BID,
+        runtime_args! {
+            ARG_AMOUNT => U512::from(VALIDATOR_1_STAKE),
+            ARG_DELEGATION_RATE => VALIDATOR_1_DELEGATION_RATE,
+            ARG_PUBLIC_KEY => VALIDATOR_1.clone(),
+        },
+    )
+    .build();
+
+    let delegator_1_delegate_request = ExecuteRequestBuilder::standard(
+        *DELEGATOR_1_ADDR,
+        CONTRACT_DELEGATE,
+        runtime_args! {
+            ARG_AMOUNT => U512::from(DELEGATOR_1_STAKE),
+            ARG_VALIDATOR => VALIDATOR_1.clone(),
+            ARG_DELEGATOR => DELEGATOR_1.clone(),
+        },
+    )
+    .build();
+
+    let delegator_2_delegate_request = ExecuteRequestBuilder::standard(
+        *DELEGATOR_2_ADDR,
+        CONTRACT_DELEGATE,
+        runtime_args! {
+            ARG_AMOUNT => U512::from(DELEGATOR_2_STAKE),
+            ARG_VALIDATOR => VALIDATOR_1.clone(),
+            ARG_DELEGATOR => DELEGATOR_2.clone(),
+        },
+    )
+    .build();
+
+    let post_genesis_requests = vec![
+        system_fund_request,
+        validator_1_fund_request,
+        delegator_1_fund_request,
+        delegator_2_fund_request,
+        validator_1_add_bid_request,
+        delegator_1_delegate_request,
+        delegator_2_delegate_request,
+    ];
+
+    let mut timestamp_millis =
+        DEFAULT_GENESIS_TIMESTAMP_MILLIS + DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS;
+
+    let run_genesis_request = {
+        let exec_config = GenesisConfigBuilder::default()
+            .with_accounts(DEFAULT_ACCOUNTS.clone())
+            .build();
+
+        GenesisRequest::new(
+            DEFAULT_GENESIS_CONFIG_HASH,
+            DEFAULT_PROTOCOL_VERSION,
+            exec_config,
+            DEFAULT_CHAINSPEC_REGISTRY.clone(),
+        )
+    };
+    let chainspec = ChainspecConfig::default().with_minimum_bid_amount(MINIMUM_BID_AMOUNT);
+
+    let mut builder = LmdbWasmTestBuilder::new_temporary_with_config(chainspec);
+
+    builder.run_genesis(run_genesis_request);
+
+    for request in post_genesis_requests {
+        builder.exec(request).commit().expect_success();
+    }
+
+    // Try to unbond partially. Stake would fall below minimum bid which should force a full
+    // unbonding.
+    let validator_1_withdraw_bid = ExecuteRequestBuilder::standard(
+        *VALIDATOR_1_ADDR,
+        CONTRACT_WITHDRAW_BID,
+        runtime_args! {
+            ARG_PUBLIC_KEY => VALIDATOR_1.clone(),
+            ARG_AMOUNT => U512::from(VALIDATOR_1_WITHDRAW_AMOUNT),
+        },
+    )
+    .build();
+
+    builder
+        .exec(validator_1_withdraw_bid)
+        .commit()
+        .expect_success();
+
+    let bids_after = builder.get_bids();
+    assert!(bids_after.validator_bid(&VALIDATOR_1).is_none());
+
+    let unbonding_purses_before = builder.get_unbonds();
+
+    let unbond_kind = UnbondKind::Validator(VALIDATOR_1.clone());
+    let validator_1_era = unbonding_purses_before
+        .get(&unbond_kind)
+        .expect("should have unbonding purse")
+        .first()
+        .expect("must have unbond")
+        .eras()
+        .first()
+        .expect("should have era");
+
+    let unbond_kind = UnbondKind::DelegatedPublicKey(DELEGATOR_1.clone());
+    let delegator_1_unbonding_purse = unbonding_purses_before
+        .get(&unbond_kind)
+        .expect("should have unbonding purse entry")
+        .first()
+        .expect("must have unbond")
+        .eras()
+        .first()
+        .expect("should have unbonding purse");
+
+    let unbond_kind = UnbondKind::DelegatedPublicKey(DELEGATOR_2.clone());
+    let delegator_2_unbonding_purse = unbonding_purses_before
+        .get(&unbond_kind)
+        .expect("should have unbonding purse entry")
+        .first()
+        .expect("must have unbond")
+        .eras()
+        .first()
+        .expect("should have unbonding purse");
+
+    assert_eq!(validator_1_era.amount(), &U512::from(VALIDATOR_1_STAKE));
+    assert_eq!(
+        delegator_1_unbonding_purse.amount(),
+        &U512::from(DELEGATOR_1_STAKE)
+    );
+    assert_eq!(
+        delegator_2_unbonding_purse.amount(),
+        &U512::from(DELEGATOR_2_STAKE)
+    );
+
+    // Process unbonding requests to verify delegators received their stakes
+    let validator_1 = builder
+        .get_entity_by_account_hash(*VALIDATOR_1_ADDR)
+        .expect("should have validator 1 account");
+    let validator_1_balance_before = builder.get_purse_balance(validator_1.main_purse());
+
+    let delegator_1 = builder
+        .get_entity_by_account_hash(*DELEGATOR_1_ADDR)
+        .expect("should have delegator 1 account");
+    let delegator_1_balance_before = builder.get_purse_balance(delegator_1.main_purse());
+
+    let delegator_2 = builder
+        .get_entity_by_account_hash(*DELEGATOR_2_ADDR)
+        .expect("should have delegator 1 account");
+    let delegator_2_balance_before = builder.get_purse_balance(delegator_2.main_purse());
+
+    for _ in 0..=DEFAULT_UNBONDING_DELAY {
+        builder.run_auction(timestamp_millis, Vec::new());
+        timestamp_millis += TIMESTAMP_MILLIS_INCREMENT;
+    }
+
+    let validator_1_balance_after = builder.get_purse_balance(validator_1.main_purse());
+    let delegator_1_balance_after = builder.get_purse_balance(delegator_1.main_purse());
+    let delegator_2_balance_after = builder.get_purse_balance(delegator_2.main_purse());
+
+    assert_eq!(
+        validator_1_balance_before + U512::from(VALIDATOR_1_STAKE),
+        validator_1_balance_after
+    );
+    assert_eq!(
+        delegator_1_balance_before + U512::from(DELEGATOR_1_STAKE),
+        delegator_1_balance_after
+    );
+    assert_eq!(
+        delegator_2_balance_before + U512::from(DELEGATOR_2_STAKE),
+        delegator_2_balance_after
+    );
+}
+
+#[ignore]
+#[test]
 fn should_handle_evictions() {
     let activate_bid = |builder: &mut LmdbWasmTestBuilder, validator_public_key: PublicKey| {
         const ARG_VALIDATOR: &str = "validator";
