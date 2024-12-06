@@ -107,9 +107,10 @@ impl<'a> TransactionV1Builder<'a> {
     /// The default time-to-live for transactions, i.e. 30 minutes.
     pub const DEFAULT_TTL: TimeDiff = TimeDiff::from_millis(30 * 60 * 1_000);
     /// The default pricing mode for v1 transactions, ie FIXED cost.
-    pub const DEFAULT_PRICING_MODE: PricingMode = PricingMode::Fixed {
-        gas_price_tolerance: 5,
-        additional_computation_factor: 0,
+    pub const DEFAULT_PRICING_MODE: PricingMode = PricingMode::PaymentLimited {
+        payment_amount: 2_500_000_000,
+        gas_price_tolerance: 3,
+        standard_payment: true,
     };
     /// The default scheduling for transactions, i.e. `Standard`.
     pub const DEFAULT_SCHEDULING: TransactionScheduling = TransactionScheduling::Standard;
@@ -384,9 +385,10 @@ impl<'a> TransactionV1Builder<'a> {
             target: fields.target,
             entry_point: fields.entry_point,
             scheduling: fields.scheduling,
-            pricing_mode: PricingMode::Fixed {
-                gas_price_tolerance: 5,
-                additional_computation_factor: 0,
+            pricing_mode: PricingMode::PaymentLimited {
+                payment_amount: 2_500_000_000,
+                gas_price_tolerance: 3,
+                standard_payment: true,
             },
             initiator_addr: Some(InitiatorAddr::PublicKey(PublicKey::from(&secret_key))),
             secret_key: Some(secret_key),
@@ -423,9 +425,10 @@ impl<'a> TransactionV1Builder<'a> {
             target,
             entry_point,
             scheduling,
-            pricing_mode: PricingMode::Fixed {
-                gas_price_tolerance: 5,
-                additional_computation_factor: 0,
+            pricing_mode: PricingMode::PaymentLimited {
+                payment_amount: 2_500_000_000,
+                gas_price_tolerance: 3,
+                standard_payment: true,
             },
             initiator_addr: Some(InitiatorAddr::PublicKey(PublicKey::from(&secret_key))),
             secret_key: Some(secret_key),
