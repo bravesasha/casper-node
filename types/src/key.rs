@@ -1002,7 +1002,7 @@ impl Key {
     //     }
     // }
 
-    /// Returns the inner bytes of `self` if `self` is of type [`Key::Package`], otherwise returns
+    /// Returns the inner bytes of `self` if `self` is of type [`Key::SmartContract`], otherwise returns
     /// `None`.
     pub fn into_package_addr(self) -> Option<PackageAddr> {
         match self {
@@ -1019,7 +1019,7 @@ impl Key {
         Some(AddressableEntityHash::new(entity_addr))
     }
 
-    /// Returns [`PackageHash`] of `self` if `self` is of type [`Key::Package`], otherwise
+    /// Returns [`PackageHash`] of `self` if `self` is of type [`Key::SmartContract`], otherwise
     /// returns `None`.
     pub fn into_package_hash(self) -> Option<PackageHash> {
         let package_addr = self.into_package_addr()?;
