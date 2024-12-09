@@ -21,7 +21,7 @@ use casper_types::{
         mint,
     },
     ApiError, EraId, GenesisAccount, GenesisValidator, Motes, ProtocolVersion, PublicKey,
-    SecretKey, U512,
+    SecretKey, DEFAULT_MINIMUM_BID_AMOUNT, U512,
 };
 
 const CONTRACT_TRANSFER_TO_ACCOUNT: &str = "transfer_to_account_u512.wasm";
@@ -93,7 +93,7 @@ fn should_run_successful_bond_and_unbond_and_slashing() {
     // Partial unbond
     //
 
-    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE) - 1;
+    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE - DEFAULT_MINIMUM_BID_AMOUNT);
 
     let unbonding_purse = builder
         .get_entity_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
@@ -393,7 +393,7 @@ fn should_run_successful_bond_and_unbond_with_release() {
     // Partial unbond
     //
 
-    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE) - 1;
+    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE) - DEFAULT_MINIMUM_BID_AMOUNT;
 
     let exec_request_2 = ExecuteRequestBuilder::standard(
         *DEFAULT_ACCOUNT_ADDR,
@@ -562,7 +562,7 @@ fn should_run_successful_unbond_funds_after_changing_unbonding_delay() {
     // Partial unbond
     //
 
-    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE) - 1;
+    let unbond_amount = U512::from(GENESIS_ACCOUNT_STAKE) - DEFAULT_MINIMUM_BID_AMOUNT;
 
     let exec_request_2 = ExecuteRequestBuilder::standard(
         *DEFAULT_ACCOUNT_ADDR,

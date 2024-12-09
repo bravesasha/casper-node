@@ -37,7 +37,7 @@ use casper_types::{
         ARG_REWARDS_MAP, ARG_VALIDATOR, ERA_ID_KEY, INITIAL_ERA_ID, METHOD_DISTRIBUTE,
     },
     EntityAddr, EraId, GenesisAccount, GenesisValidator, Key, Motes, ProtocolVersion, PublicKey,
-    SecretKey, TransactionHash, U256, U512,
+    SecretKey, TransactionHash, DEFAULT_MINIMUM_BID_AMOUNT, U256, U512,
 };
 
 const ARG_TARGET: &str = "target";
@@ -1940,7 +1940,7 @@ fn fully_undelegated_funds_should_be_released() {
 #[ignore]
 #[test]
 fn should_undelegate_delegators_when_validator_unbonds() {
-    const VALIDATOR_1_REMAINING_BID: u64 = 1;
+    const VALIDATOR_1_REMAINING_BID: u64 = DEFAULT_MINIMUM_BID_AMOUNT;
     const VALIDATOR_1_WITHDRAW_AMOUNT: u64 = VALIDATOR_1_STAKE - VALIDATOR_1_REMAINING_BID;
 
     let system_fund_request = ExecuteRequestBuilder::standard(
@@ -2393,8 +2393,7 @@ fn should_undelegate_delegators_when_validator_fully_unbonds() {
 #[ignore]
 #[test]
 fn should_undelegate_delegators_when_validator_unbonds_below_minimum_bid_amount() {
-    const MINIMUM_BID_AMOUNT: u64 = 2;
-    const VALIDATOR_1_REMAINING_BID: u64 = MINIMUM_BID_AMOUNT - 1;
+    const VALIDATOR_1_REMAINING_BID: u64 = DEFAULT_MINIMUM_BID_AMOUNT - 1;
     const VALIDATOR_1_WITHDRAW_AMOUNT: u64 = VALIDATOR_1_STAKE - VALIDATOR_1_REMAINING_BID;
 
     let system_fund_request = ExecuteRequestBuilder::standard(
@@ -2480,26 +2479,10 @@ fn should_undelegate_delegators_when_validator_unbonds_below_minimum_bid_amount(
         delegator_2_delegate_request,
     ];
 
-    let mut timestamp_millis =
-        DEFAULT_GENESIS_TIMESTAMP_MILLIS + DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS;
+    let mut timestamp_millis = DEFAULT_GENESIS_TIMESTAMP_MILLIS;
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    let run_genesis_request = {
-        let exec_config = GenesisConfigBuilder::default()
-            .with_accounts(DEFAULT_ACCOUNTS.clone())
-            .build();
-
-        GenesisRequest::new(
-            DEFAULT_GENESIS_CONFIG_HASH,
-            DEFAULT_PROTOCOL_VERSION,
-            exec_config,
-            DEFAULT_CHAINSPEC_REGISTRY.clone(),
-        )
-    };
-    let chainspec = ChainspecConfig::default().with_minimum_bid_amount(MINIMUM_BID_AMOUNT);
-
-    let mut builder = LmdbWasmTestBuilder::new_temporary_with_config(chainspec);
-
-    builder.run_genesis(run_genesis_request);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     for request in post_genesis_requests {
         builder.exec(request).commit().expect_success();
