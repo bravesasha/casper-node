@@ -27,7 +27,7 @@ fn cancel_reservations(validator: PublicKey, delegators: Vec<DelegatorKind>) {
 // Issues a cancel_reservations request to the auction contract.
 #[no_mangle]
 pub extern "C" fn call() {
-    let delegators: Vec<DelegatorKind> = runtime::get_named_arg(auction::ARG_DELEGATORS);
+    let delegators = runtime::get_named_arg(auction::ARG_DELEGATORS);
     let validator = runtime::get_named_arg(auction::ARG_VALIDATOR);
 
     cancel_reservations(validator, delegators);
