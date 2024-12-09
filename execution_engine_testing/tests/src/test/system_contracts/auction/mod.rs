@@ -620,7 +620,7 @@ fn should_read_bid_with_vesting_schedule_populated() {
 
     builder.write_data_and_commit(
         [(
-            delegation_key.clone(),
+            delegation_key,
             StoredValue::BidKind(BidKind::Delegator(Box::new(mock_bid))),
         )]
         .iter()
