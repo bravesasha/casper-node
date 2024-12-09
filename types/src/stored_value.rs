@@ -27,7 +27,7 @@ use crate::{
         auction::{Bid, BidKind, EraInfo, Unbond, UnbondingPurse, WithdrawPurse},
         prepayment::PrepaidKind,
     },
-    AddressableEntity, ByteCode, CLValue, DeployInfo, EntryPointValue, TransferV1,
+    AddressableEntity, ByteCode, CLTyped, CLValue, DeployInfo, EntryPointValue, TransferV1,
 };
 pub use global_state_identifier::GlobalStateIdentifier;
 pub use type_mismatch::TypeMismatch;
@@ -566,6 +566,8 @@ impl TryFrom<StoredValue> for CLValue {
         let type_name = stored_value.type_name();
         match stored_value {
             StoredValue::CLValue(cl_value) => Ok(cl_value),
+            StoredValue::BidKind(bid_kind) => Ok(CLValue::from_t(bid_kind)
+                .map_err(|_| TypeMismatch::new("BidKind".to_string(), type_name))?),
             StoredValue::ContractPackage(contract_package) => Ok(CLValue::from_t(contract_package)
                 .map_err(|_error| TypeMismatch::new("ContractPackage".to_string(), type_name))?),
             _ => Err(TypeMismatch::new("StoredValue".to_string(), type_name)),
