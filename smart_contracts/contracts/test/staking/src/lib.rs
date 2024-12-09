@@ -23,7 +23,7 @@ use casper_types::{
     bytesrepr::{self, ToBytes},
     runtime_args,
     system::auction::{self, BidAddr, BidKind},
-    ApiError, CLValue, Key, PublicKey, StoredValue, URef, U512,
+    ApiError, CLValue, Key, PublicKey, URef, U512,
 };
 
 pub const STAKING_ID: &str = "staking_contract";
