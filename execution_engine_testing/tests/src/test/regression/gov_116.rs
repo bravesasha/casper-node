@@ -4,18 +4,17 @@ use num_traits::Zero;
 use once_cell::sync::Lazy;
 
 use casper_engine_test_support::{
-    utils, ChainspecConfig, ExecuteRequestBuilder, LmdbWasmTestBuilder, TransferRequestBuilder,
-    DEFAULT_ACCOUNTS, DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_PUBLIC_KEY, DEFAULT_CHAINSPEC_REGISTRY,
-    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
-    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PROTOCOL_VERSION, DEFAULT_VALIDATOR_SLOTS,
-    MINIMUM_ACCOUNT_CREATION_BALANCE,
+    genesis_config_builder::GenesisConfigBuilder, utils, ChainspecConfig, ExecuteRequestBuilder,
+    LmdbWasmTestBuilder, TransferRequestBuilder, DEFAULT_ACCOUNTS, DEFAULT_ACCOUNT_ADDR,
+    DEFAULT_ACCOUNT_PUBLIC_KEY, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_GENESIS_CONFIG_HASH,
+    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PROTOCOL_VERSION,
+    DEFAULT_VALIDATOR_SLOTS, MINIMUM_ACCOUNT_CREATION_BALANCE,
 };
 use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     runtime_args,
     system::auction::{self, DelegationRate, EraValidators, VESTING_SCHEDULE_LENGTH_MILLIS},
-    GenesisAccount, GenesisConfigBuilder, GenesisValidator, Motes, PublicKey, SecretKey, U256,
-    U512,
+    GenesisAccount, GenesisValidator, Motes, PublicKey, SecretKey, U256, U512,
 };
 
 const MINIMUM_BONDED_AMOUNT: u64 = 1_000;

@@ -27,8 +27,7 @@ use casper_types::{
     ExecutableDeployItem, FinalitySignature, FinalitySignatureId, FinalitySignatureV2, PackageHash,
     ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey, SemVer, SignedBlockHeader,
     SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
-    TransactionId, TransactionRuntimeParams, TransactionV1, TransactionV1Builder,
-    TransactionV1Hash, URef, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH,
+    TransactionId, TransactionRuntimeParams, TransactionV1, TransactionV1Hash, URef, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH,
     LARGE_WASM_LANE_ID, MINT_LANE_ID, U512,
 };
 
@@ -39,8 +38,8 @@ use crate::{
     },
     protocol::Message,
     types::{
-        BlockExecutionResultsOrChunk, BlockPayload, FinalizedBlock, InternalEraReport,
-        LegacyDeploy, SyncLeap, TrieOrChunk,
+        transaction::transaction_v1_builder::TransactionV1Builder, BlockExecutionResultsOrChunk,
+        BlockPayload, FinalizedBlock, InternalEraReport, LegacyDeploy, SyncLeap, TrieOrChunk,
     },
 };
 use casper_storage::block_store::types::ApprovalsHashes;

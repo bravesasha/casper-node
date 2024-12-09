@@ -3,24 +3,24 @@ pub mod management;
 mod restricted_auction;
 mod unrestricted_transfers;
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use casper_engine_test_support::{
-    ChainspecConfig, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_AUCTION_DELAY,
-    DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
+    genesis_config_builder::GenesisConfigBuilder, ChainspecConfig, LmdbWasmTestBuilder,
+    DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_AUCTION_DELAY, DEFAULT_CHAINSPEC_REGISTRY,
+    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
     DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PROPOSER_PUBLIC_KEY, DEFAULT_PROTOCOL_VERSION,
     DEFAULT_ROUND_SEIGNIORAGE_RATE, DEFAULT_STORAGE_COSTS, DEFAULT_SYSTEM_CONFIG,
     DEFAULT_UNBONDING_DELAY, DEFAULT_VALIDATOR_SLOTS, DEFAULT_WASM_CONFIG,
 };
 use num_rational::Ratio;
 use once_cell::sync::Lazy;
+use std::collections::{BTreeMap, BTreeSet};
 
 use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     account::AccountHash, system::auction::DELEGATION_RATE_DENOMINATOR, AdministratorAccount,
-    CoreConfig, FeeHandling, GenesisAccount, GenesisConfig, GenesisConfigBuilder, GenesisValidator,
-    HostFunction, HostFunctionCosts, MessageLimits, Motes, OpcodeCosts, PublicKey, RefundHandling,
-    SecretKey, StorageCosts, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
+    CoreConfig, FeeHandling, GenesisAccount, GenesisConfig, GenesisValidator, HostFunction,
+    HostFunctionCosts, MessageLimits, Motes, OpcodeCosts, PublicKey, RefundHandling, SecretKey,
+    StorageCosts, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
     DEFAULT_V1_WASM_MAX_MEMORY, U512,
 };
 use tempfile::TempDir;

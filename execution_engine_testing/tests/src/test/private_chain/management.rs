@@ -17,8 +17,8 @@ use casper_types::{
         mint,
         standard_payment::{self, ARG_AMOUNT},
     },
-    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, GenesisAccount,
-    GenesisConfigBuilder, Key, Package, PackageHash, RuntimeArgs, U512,
+    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, GenesisAccount, Key, Package,
+    PackageHash, RuntimeArgs, U512,
 };
 use tempfile::TempDir;
 
@@ -27,7 +27,7 @@ use crate::{
         self, ACCOUNT_2_ADDR, ADMIN_1_ACCOUNT_ADDR, PRIVATE_CHAIN_ALLOW_AUCTION_BIDS,
         PRIVATE_CHAIN_COMPUTE_REWARDS, VALIDATOR_1_PUBLIC_KEY,
     },
-    wasm_utils,
+    wasm_utils, GenesisConfigBuilder,
 };
 
 use super::{

@@ -27,6 +27,7 @@ pub const STAKING_ID: &str = "staking_contract";
 pub const ARG_ACTION: &str = "action";
 pub const ARG_AMOUNT: &str = "amount";
 pub const ARG_VALIDATOR: &str = "validator";
+pub const ARG_NEW_VALIDATOR: &str = "new_validator";
 
 pub const STAKING_PURSE: &str = "staking_purse";
 pub const INSTALLER: &str = "installer";
@@ -34,8 +35,7 @@ pub const CONTRACT_NAME: &str = "staking";
 pub const HASH_KEY_NAME: &str = "staking_package";
 pub const ACCESS_KEY_NAME: &str = "staking_package_access";
 pub const CONTRACT_VERSION: &str = "staking_contract_version";
-pub const ENTRY_POINT_STAKING: &str = "stake";
-pub const ENTRY_POINT_UNSTAKING: &str = "unstake";
+pub const ENTRY_POINT_RUN: &str = "run";
 
 #[repr(u16)]
 enum StakingError {
@@ -47,6 +47,7 @@ enum StakingError {
     UnexpectedKeyVariant = 6,
     UnexpectedAction = 7,
     MissingValidator = 8,
+    MissingNewValidator = 9,
 }
 
 impl From<StakingError> for ApiError {
@@ -74,12 +75,27 @@ pub fn run() {
         unstake();
     } else if action == *"STAKE".to_string() {
         stake();
+    } else if action == *"STAKE_ALL".to_string() {
+        stake_all();
+    } else if action == *"RESTAKE".to_string() {
+        restake();
     } else {
         revert(ApiError::User(StakingError::UnexpectedAction as u16));
     }
 }
 
-#[no_mangle]
+fn unstake() {
+    let args = get_unstaking_args(false);
+    let contract_hash = system::get_auction();
+    runtime::call_contract::<U512>(contract_hash, auction::METHOD_UNDELEGATE, args);
+}
+
+fn restake() {
+    let args = get_unstaking_args(true);
+    let contract_hash = system::get_auction();
+    runtime::call_contract::<U512>(contract_hash, auction::METHOD_REDELEGATE, args);
+}
+
 fn stake() {
     let staking_purse = get_uref_with_user_errors(
         STAKING_PURSE,
@@ -93,15 +109,34 @@ fn stake() {
     let amount: U512 = runtime::get_named_arg(ARG_AMOUNT);
     let contract_hash = system::get_auction();
     let args = runtime_args! {
-        auction::ARG_DELEGATOR_PURSE => staking_purse.addr(),
+        auction::ARG_DELEGATOR_PURSE => staking_purse,
         auction::ARG_VALIDATOR => validator,
         auction::ARG_AMOUNT => amount,
     };
     runtime::call_contract::<U512>(contract_hash, auction::METHOD_DELEGATE, args);
 }
 
-#[no_mangle]
-fn unstake() {
+fn stake_all() {
+    let staking_purse = get_uref_with_user_errors(
+        STAKING_PURSE,
+        StakingError::MissingStakingPurse,
+        StakingError::InvalidStakingPurse,
+    );
+    let validator: PublicKey = match runtime::try_get_named_arg(ARG_VALIDATOR) {
+        Some(validator_public_key) => validator_public_key,
+        None => revert(ApiError::User(StakingError::MissingValidator as u16)),
+    };
+    let amount: U512 = system::get_purse_balance(staking_purse).unwrap_or_revert();
+    let contract_hash = system::get_auction();
+    let args = runtime_args! {
+        auction::ARG_DELEGATOR_PURSE => staking_purse,
+        auction::ARG_VALIDATOR => validator,
+        auction::ARG_AMOUNT => amount,
+    };
+    runtime::call_contract::<U512>(contract_hash, auction::METHOD_DELEGATE, args);
+}
+
+fn get_unstaking_args(is_restake: bool) -> casper_types::RuntimeArgs {
     let staking_purse = get_uref_with_user_errors(
         STAKING_PURSE,
         StakingError::MissingStakingPurse,
@@ -112,13 +147,25 @@ fn unstake() {
         None => revert(ApiError::User(StakingError::MissingValidator as u16)),
     };
     let amount: U512 = runtime::get_named_arg(ARG_AMOUNT);
-    let contract_hash = system::get_auction();
-    let args = runtime_args! {
-        auction::ARG_DELEGATOR_PURSE => staking_purse.addr(),
-        auction::ARG_VALIDATOR => validator,
-        auction::ARG_AMOUNT => amount,
+    if !is_restake {
+        return runtime_args! {
+            auction::ARG_DELEGATOR_PURSE => staking_purse,
+            auction::ARG_VALIDATOR => validator,
+            auction::ARG_AMOUNT => amount,
+        };
+    }
+
+    let new_validator: PublicKey = match runtime::try_get_named_arg(ARG_NEW_VALIDATOR) {
+        Some(validator_public_key) => validator_public_key,
+        None => revert(ApiError::User(StakingError::MissingNewValidator as u16)),
     };
-    runtime::call_contract::<U512>(contract_hash, auction::METHOD_UNDELEGATE, args);
+
+    runtime_args! {
+        auction::ARG_DELEGATOR_PURSE => staking_purse,
+        auction::ARG_VALIDATOR => validator,
+        auction::ARG_NEW_VALIDATOR => new_validator,
+        auction::ARG_AMOUNT => amount,
+    }
 }
 
 fn get_account_hash_with_user_errors(

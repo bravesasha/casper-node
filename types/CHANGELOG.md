@@ -81,7 +81,6 @@ All notable changes to this project will be documented in this file. The format 
 - enum LegacyRequiredFinality
 - enum FeeHandling
 - struct GenesisConfig
-- struct GenesisConfigBuilder
 - struct GlobalStateUpdateConfig
 - struct GlobalStateUpdate
 - enum GlobalStateUpdateError
@@ -145,8 +144,6 @@ All notable changes to this project will be documented in this file. The format 
 - struct Approval
 - struct ApprovalsHash
 - enum InvalidDeploy
-- enum DeployBuilder
-- enum DeployBuilderError
 - enum DeployDecodeFromJsonError
 - struct ExecutableDeployItem,
 - enum ExecutableDeployItemIdentifier
@@ -168,8 +165,6 @@ All notable changes to this project will be documented in this file. The format 
 - struct TransactionV1,
 - struct TransactionV1Payload,
 - struct TransactionV1Hash
-- struct TransactionV1Builder
-- enum TransactionV1BuilderError
 - enum TransactionV1DecodeFromJsonError
 - enum TransactionV1Error
 - struct TransactionV1ExcessiveSizeError
@@ -207,7 +202,6 @@ All notable changes to this project will be documented in this file. The format 
 - enum system::reservation::ReservationKind
 - method CLValue::to_t
 - function handle_stored_dictionary_value
-- in arg_handling namespace functions: has_valid_activate_bid_args, has_valid_add_bid_args, has_valid_change_bid_public_key_args, has_valid_delegate_args, has_valid_redelegate_args, has_valid_transfer_args, has_valid_undelegate_args, has_valid_withdraw_bid_args, new_add_bid_args, new_delegate_args, new_redelegate_args, new_transfer_args, new_undelegate_args, new_withdraw_bid_args
 - methods in ContractWasm: `new` and `take_bytes`
 - method `lock_status` in struct ContractPackage
 - function bytesrepr::allocate_buffer_for_size(expected_size: usize) -> Result<Vec<u8>, Error>

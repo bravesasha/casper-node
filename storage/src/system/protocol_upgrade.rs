@@ -1156,8 +1156,11 @@ where
                         validator: validator.to_account_hash(),
                         unbonder: unbonder.to_account_hash(),
                     });
-                    let unbond = BidKind::Unbond(Box::new(Unbond::from(unbonding_purse)));
-                    tc.write(new_key, StoredValue::BidKind(unbond));
+                    let unbond = Box::new(Unbond::from(unbonding_purse));
+                    let unbond_bid_kind = BidKind::Unbond(unbond.clone());
+                    if !unbond.eras().is_empty() {
+                        tc.write(new_key, StoredValue::BidKind(unbond_bid_kind));
+                    }
                 }
             }
         }

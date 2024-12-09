@@ -125,13 +125,13 @@ pub use chainspec::{
     AccountConfig, AccountsConfig, ActivationPoint, AdministratorAccount, AuctionCosts,
     BrTableCost, Chainspec, ChainspecRawBytes, ChainspecRegistry, ConsensusProtocolName,
     ControlFlowCosts, CoreConfig, DelegatorConfig, DeployConfig, FeeHandling, GenesisAccount,
-    GenesisConfig, GenesisConfigBuilder, GenesisValidator, GlobalStateUpdate,
-    GlobalStateUpdateConfig, GlobalStateUpdateError, HandlePaymentCosts, HighwayConfig,
-    HoldBalanceHandling, HostFunction, HostFunctionCost, HostFunctionCosts, LegacyRequiredFinality,
-    MessageLimits, MintCosts, NetworkConfig, NextUpgrade, OpcodeCosts, PricingHandling,
-    ProtocolConfig, ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts, StorageCosts,
-    SystemConfig, TransactionConfig, TransactionLimitsDefinition, TransactionV1Config,
-    VacancyConfig, ValidatorConfig, WasmConfig, WasmV1Config, DEFAULT_GAS_HOLD_INTERVAL,
+    GenesisConfig, GenesisValidator, GlobalStateUpdate, GlobalStateUpdateConfig,
+    GlobalStateUpdateError, HandlePaymentCosts, HighwayConfig, HoldBalanceHandling, HostFunction,
+    HostFunctionCost, HostFunctionCosts, LegacyRequiredFinality, MessageLimits, MintCosts,
+    NetworkConfig, NextUpgrade, OpcodeCosts, PricingHandling, ProtocolConfig,
+    ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts, StorageCosts, SystemConfig,
+    TransactionConfig, TransactionLimitsDefinition, TransactionV1Config, VacancyConfig,
+    ValidatorConfig, WasmConfig, WasmV1Config, DEFAULT_GAS_HOLD_INTERVAL,
     DEFAULT_HOST_FUNCTION_NEW_DICTIONARY, DEFAULT_MINIMUM_BID_AMOUNT, DEFAULT_REFUND_HANDLING,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
@@ -191,19 +191,15 @@ pub use timestamp::{TimeDiff, Timestamp};
 #[cfg(any(feature = "std", test))]
 pub use transaction::GasLimited;
 pub use transaction::{
-    arg_handling, AddressableEntityIdentifier, Approval, ApprovalsHash, Deploy,
-    DeployDecodeFromJsonError, DeployError, DeployExcessiveSizeError, DeployHash, DeployHeader,
-    DeployId, ExecutableDeployItem, ExecutableDeployItemIdentifier, ExecutionInfo, InitiatorAddr,
+    AddressableEntityIdentifier, Approval, ApprovalsHash, Deploy, DeployDecodeFromJsonError,
+    DeployError, DeployExcessiveSizeError, DeployHash, DeployHeader, DeployId,
+    ExecutableDeployItem, ExecutableDeployItemIdentifier, ExecutionInfo, InitiatorAddr,
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, NamedArg, PackageIdentifier,
     PricingMode, PricingModeError, RuntimeArgs, Transaction, TransactionArgs,
     TransactionEntryPoint, TransactionHash, TransactionId, TransactionInvocationTarget,
     TransactionRuntimeParams, TransactionScheduling, TransactionTarget, TransactionV1,
     TransactionV1DecodeFromJsonError, TransactionV1Error, TransactionV1ExcessiveSizeError,
     TransactionV1Hash, TransactionV1Payload, TransferTarget,
-};
-#[cfg(any(feature = "std", test))]
-pub use transaction::{
-    DeployBuilder, DeployBuilderError, TransactionV1Builder, TransactionV1BuilderError,
 };
 pub use transfer::{
     Transfer, TransferAddr, TransferFromStrError, TransferV1, TransferV2, TRANSFER_ADDR_LENGTH,

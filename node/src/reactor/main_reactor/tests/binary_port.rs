@@ -31,7 +31,7 @@ use casper_types::{
     ContractWasmHash, DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions,
     GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers,
     ProtocolVersion, PublicKey, Rewards, SecretKey, SignedBlock, StoredValue, Transaction,
-    TransactionV1Builder, Transfer, URef, U512,
+    TransactionRuntime, TransactionV1Builder, Transfer, URef, U512,
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
@@ -43,7 +43,7 @@ use crate::{
     testing::{
         self, filter_reactor::FilterReactor, network::TestingNetwork, ConditionCheckReactor,
     },
-    types::NodeId,
+    types::{transaction::transaction_v1_builder::TransactionV1Builder, NodeId},
 };
 
 use super::{InitialStakes, TestFixture, ERA_ONE};

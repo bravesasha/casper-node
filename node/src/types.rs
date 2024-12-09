@@ -11,7 +11,7 @@ mod node_id;
 mod status_feed;
 mod sync_leap;
 pub(crate) mod sync_leap_validation_metadata;
-mod transaction;
+pub(crate) mod transaction;
 mod validator_matrix;
 mod value_or_chunk;
 

@@ -1082,16 +1082,17 @@ where
                     match Self::get_named_argument(runtime_args, auction::ARG_DELEGATOR) {
                         Ok(pk) => DelegatorKind::PublicKey(pk),
                         Err(_) => {
-                            match Self::get_named_argument(
+                            let uref: URef = match Self::get_named_argument(
                                 runtime_args,
                                 auction::ARG_DELEGATOR_PURSE,
                             ) {
-                                Ok(addr) => DelegatorKind::Purse(addr),
+                                Ok(uref) => uref,
                                 Err(err) => {
                                     debug!(%err, "failed to get delegator purse argument");
                                     return Err(err);
                                 }
-                            }
+                            };
+                            DelegatorKind::Purse(uref.addr())
                         }
                     }
                 };
@@ -1115,16 +1116,17 @@ where
                     match Self::get_named_argument(runtime_args, auction::ARG_DELEGATOR) {
                         Ok(pk) => DelegatorKind::PublicKey(pk),
                         Err(_) => {
-                            match Self::get_named_argument(
+                            let uref: URef = match Self::get_named_argument(
                                 runtime_args,
                                 auction::ARG_DELEGATOR_PURSE,
                             ) {
-                                Ok(addr) => DelegatorKind::Purse(addr),
+                                Ok(uref) => uref,
                                 Err(err) => {
                                     debug!(%err, "failed to get delegator purse argument");
                                     return Err(err);
                                 }
-                            }
+                            };
+                            DelegatorKind::Purse(uref.addr())
                         }
                     }
                 };
@@ -1145,16 +1147,17 @@ where
                     match Self::get_named_argument(runtime_args, auction::ARG_DELEGATOR) {
                         Ok(pk) => DelegatorKind::PublicKey(pk),
                         Err(_) => {
-                            match Self::get_named_argument(
+                            let uref: URef = match Self::get_named_argument(
                                 runtime_args,
                                 auction::ARG_DELEGATOR_PURSE,
                             ) {
-                                Ok(addr) => DelegatorKind::Purse(addr),
+                                Ok(uref) => uref,
                                 Err(err) => {
                                     debug!(%err, "failed to get delegator purse argument");
                                     return Err(err);
                                 }
-                            }
+                            };
+                            DelegatorKind::Purse(uref.addr())
                         }
                     }
                 };
@@ -1775,7 +1778,7 @@ where
                     .runtime_footprint()
                     .borrow()
                     .main_purse()
-                    .expect("need purse for attenutation")
+                    .expect("need purse for attenuation")
                     .addr(),
                 AccessRights::WRITE,
             )?
@@ -1818,7 +1821,8 @@ where
             EntryPointType::Called | EntryPointType::Factory => {
                 let mut access_rights = footprint.extract_access_rights(entity_hash.value());
                 access_rights.extend(&extended_access_rights);
-                (footprint.named_keys().clone(), access_rights)
+                let named_keys = footprint.named_keys().clone();
+                (named_keys, access_rights)
             }
         };
 
@@ -1867,17 +1871,10 @@ where
                     );
                 }
                 SystemEntityType::Auction => {
-                    let mut combined_access_rights = self
-                        .context
-                        .runtime_footprint()
-                        .borrow()
-                        .extract_access_rights(context_entity_hash);
-                    combined_access_rights.extend_access_rights(access_rights.take_access_rights());
-
                     return self.call_host_auction(
                         entry_point_name,
                         &runtime_args,
-                        combined_access_rights,
+                        access_rights,
                         stack,
                     );
                 }

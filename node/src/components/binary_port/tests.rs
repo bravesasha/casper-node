@@ -12,7 +12,7 @@ use casper_binary_port::{
 
 use casper_types::{
     BlockHeader, Digest, GlobalStateIdentifier, KeyTag, PublicKey, Timestamp, Transaction,
-    TransactionV1Builder,
+    TransactionV1,
 };
 
 use crate::{
@@ -447,7 +447,7 @@ fn trie_request() -> BinaryRequest {
 
 fn try_speculative_exec_request(rng: &mut TestRng) -> BinaryRequest {
     BinaryRequest::TrySpeculativeExec {
-        transaction: Transaction::V1(TransactionV1Builder::new_random(rng).build().unwrap()),
+        transaction: Transaction::V1(TransactionV1::random(rng)),
     }
 }
 

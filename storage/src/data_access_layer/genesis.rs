@@ -5,7 +5,7 @@ use rand::{
 };
 
 use casper_types::{
-    execution::Effects, ChainspecRegistry, Digest, GenesisConfig, GenesisValidator,
+    execution::Effects, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig, GenesisValidator,
     ProtocolVersion, PublicKey,
 };
 
@@ -39,6 +39,11 @@ impl GenesisRequest {
     /// Set enable entity.
     pub fn set_enable_entity(&mut self, enable: bool) {
         self.config.set_enable_entity(enable);
+    }
+
+    /// Push genesis validator.
+    pub fn push_genesis_account(&mut self, genesis_account: GenesisAccount) {
+        self.config.push_account(genesis_account);
     }
 
     /// Push genesis validator.

@@ -243,24 +243,25 @@ impl BalanceHoldAddr {
         // it is possible that it will turn out that all further tags include blocktime
         // in which case it can be pulled up out of the tag guard condition.
         // however, im erring on the side of future tolerance and guarding it for now.
-        if tag == BalanceHoldAddrTag::Gas {
-            let block_time_bytes =
-                <[u8; BLOCKTIME_SERIALIZED_LENGTH]>::try_from(bytes[33..].as_ref())
-                    .map_err(|err| FromStrError::BalanceHold(err.to_string()))?;
+        match tag {
+            BalanceHoldAddrTag::Gas => {
+                let block_time_bytes =
+                    <[u8; BLOCKTIME_SERIALIZED_LENGTH]>::try_from(bytes[33..].as_ref())
+                        .map_err(|err| FromStrError::BalanceHold(err.to_string()))?;
 
-            let block_time_millis = <u64>::from_le_bytes(block_time_bytes);
-            let block_time = BlockTime::new(block_time_millis);
-            Ok(BalanceHoldAddr::new_gas(uref_addr, block_time))
-        } else if tag == BalanceHoldAddrTag::Processing {
-            let block_time_bytes =
-                <[u8; BLOCKTIME_SERIALIZED_LENGTH]>::try_from(bytes[33..].as_ref())
-                    .map_err(|err| FromStrError::BalanceHold(err.to_string()))?;
+                let block_time_millis = <u64>::from_le_bytes(block_time_bytes);
+                let block_time = BlockTime::new(block_time_millis);
+                Ok(BalanceHoldAddr::new_gas(uref_addr, block_time))
+            }
+            BalanceHoldAddrTag::Processing => {
+                let block_time_bytes =
+                    <[u8; BLOCKTIME_SERIALIZED_LENGTH]>::try_from(bytes[33..].as_ref())
+                        .map_err(|err| FromStrError::BalanceHold(err.to_string()))?;
 
-            let block_time_millis = <u64>::from_le_bytes(block_time_bytes);
-            let block_time = BlockTime::new(block_time_millis);
-            Ok(BalanceHoldAddr::new_processing(uref_addr, block_time))
-        } else {
-            Err(FromStrError::BalanceHold("invalid tag".to_string()))
+                let block_time_millis = <u64>::from_le_bytes(block_time_bytes);
+                let block_time = BlockTime::new(block_time_millis);
+                Ok(BalanceHoldAddr::new_processing(uref_addr, block_time))
+            }
         }
     }
 }

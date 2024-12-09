@@ -1,12 +1,12 @@
 use once_cell::sync::Lazy;
 
 use casper_engine_test_support::{
-    utils, ChainspecConfig, DeployItemBuilder, ExecuteRequestBuilder, LmdbWasmTestBuilder,
-    StepRequestBuilder, DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_INITIAL_BALANCE,
-    DEFAULT_ACCOUNT_PUBLIC_KEY, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_GENESIS_CONFIG_HASH,
-    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PAYMENT,
-    DEFAULT_PROPOSER_ADDR, DEFAULT_PROPOSER_PUBLIC_KEY, DEFAULT_PROTOCOL_VERSION,
-    DEFAULT_VESTING_SCHEDULE_PERIOD_MILLIS,
+    genesis_config_builder::GenesisConfigBuilder, utils, ChainspecConfig, DeployItemBuilder,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, StepRequestBuilder, DEFAULT_ACCOUNT_ADDR,
+    DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_ACCOUNT_PUBLIC_KEY, DEFAULT_CHAINSPEC_REGISTRY,
+    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
+    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PAYMENT, DEFAULT_PROPOSER_ADDR,
+    DEFAULT_PROPOSER_PUBLIC_KEY, DEFAULT_PROTOCOL_VERSION, DEFAULT_VESTING_SCHEDULE_PERIOD_MILLIS,
 };
 use casper_execution_engine::{
     engine_state::{self},
@@ -19,8 +19,7 @@ use casper_types::{
         auction::{self, BidAddr, DelegationRate},
         standard_payment,
     },
-    ApiError, GenesisAccount, GenesisConfigBuilder, GenesisValidator, Key, Motes, StoredValue,
-    U512,
+    ApiError, GenesisAccount, GenesisValidator, Key, Motes, StoredValue, U512,
 };
 
 use crate::lmdb_fixture;
