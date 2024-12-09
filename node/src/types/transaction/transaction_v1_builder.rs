@@ -5,7 +5,7 @@ use crate::types::transaction::initiator_addr_and_secret_key::InitiatorAddrAndSe
 use casper_types::{
     bytesrepr::{Bytes, ToBytes},
     Digest, InitiatorAddr, PricingMode, RuntimeArgs, SecretKey, TimeDiff, Timestamp,
-    TransactionArgs, TransactionEntryPoint, TransactionRuntime, TransactionScheduling,
+    TransactionArgs, TransactionEntryPoint, TransactionRuntimeParams, TransactionScheduling,
     TransactionTarget, TransactionV1, TransactionV1Payload,
 };
 #[cfg(test)]
@@ -153,10 +153,7 @@ impl<'a> TransactionV1Builder<'a> {
     ///
     /// A new `TransactionV1Builder` instance.
     pub(crate) fn new() -> Self {
-        #[cfg(any(feature = "std-fs-io", test))]
         let timestamp = Timestamp::now();
-        #[cfg(not(any(feature = "std-fs-io", test)))]
-        let timestamp = Timestamp::zero();
 
         TransactionV1Builder {
             args: TransactionArgs::Named(RuntimeArgs::new()),
@@ -505,62 +502,6 @@ impl<'a> TransactionV1Builder<'a> {
         self
     }
 
-    /*
-
-
-
-    /// Sets the runtime args in the transaction.
-    pub fn with_chunked_args(mut self, args: Bytes) -> Self {
-        self.args = TransactionArgs::Bytesrepr(args);
-        self
-    }
-
-    /// Sets the transaction args in the transaction.
-    pub fn with_transaction_args(mut self, args: TransactionArgs) -> Self {
-        self.args = args;
-        self
-    }
-
-    /// Sets the scheduling for the transaction.
-    ///
-    /// If not provided, the scheduling will be set to [`Self::DEFAULT_SCHEDULING`].
-    pub fn with_scheduling(mut self, scheduling: TransactionScheduling) -> Self {
-        self.scheduling = scheduling;
-        self
-    }
-
-    /// Sets the entry point for the transaction.
-    pub fn with_entry_point(mut self, entry_point: TransactionEntryPoint) -> Self {
-        self.entry_point = entry_point;
-        self
-    }
-
-    /// Sets the secret key to `None`, meaning the transaction can still be built but will be
-    /// unsigned and will be invalid until subsequently signed.
-    #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn with_no_secret_key(mut self) -> Self {
-        self.secret_key = None;
-        self
-    }
-
-    /// Sets an invalid approval in the transaction.
-    #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn with_invalid_approval(mut self, rng: &mut TestRng) -> Self {
-        let secret_key = SecretKey::random(rng);
-        let hash = TransactionV1Hash::random(rng).into();
-        let approval = Approval::create(&hash, &secret_key);
-        self.invalid_approvals.push(approval);
-        self
-    }
-
-    /// Manually sets additional fields
-    #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn with_additional_fields(mut self, additional_fields: BTreeMap<u16, Bytes>) -> Self {
-        self.additional_fields = additional_fields;
-        self
-    }
-    */
-
     /// Returns the new transaction, or an error if non-defaulted fields were not set.
     ///
     /// For more info, see [the `TransactionBuilder` documentation](TransactionV1Builder).
@@ -681,8 +622,6 @@ fn build_transaction(
 }
 
 use core::fmt::{self, Display, Formatter};
-#[cfg(feature = "std")]
-use std::error::Error as StdError;
 
 /// Errors returned while building a [`TransactionV1`] using a [`TransactionV1Builder`].
 #[derive(Clone, Eq, PartialEq, Debug)]

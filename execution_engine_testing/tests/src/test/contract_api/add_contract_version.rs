@@ -11,9 +11,10 @@ use casper_execution_engine::{
 };
 use casper_types::{
     bytesrepr::{Bytes, ToBytes},
-    ApiError, BlockTime,Digest,  EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion, PublicKey, RuntimeArgs,
-    Transaction, TransactionArgs, SecretKey, TimeDiff, Timestamp, TransactionRuntime, Transaction, TransactionArgs,TransactionTarget,TransactionScheduling, TransactionEntryPoint, TransactionRuntimeParams,
-    TransactionTarget, TransactionV1Builder,TransactionV1,  TransactionScheduling,TransactionV1Payload,
+    ApiError, BlockTime, Digest, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion,
+    PublicKey, RuntimeArgs, SecretKey, TimeDiff, Timestamp, Transaction, TransactionArgs,
+    TransactionEntryPoint, TransactionRuntimeParams, TransactionScheduling, TransactionTarget,
+    TransactionV1, TransactionV1Payload,
 };
 
 const CONTRACT: &str = "do_nothing_stored.wasm";
@@ -49,11 +50,8 @@ fn try_add_contract_version(
         is_install_upgrade,
         module_bytes,
         TransactionRuntimeParams::VmCasperV1,
-    )
-    .with_secret_key(&DEFAULT_ACCOUNT_SECRET_KEY)
-    .with_chain_name(CHAIN_NAME)
-    .build()
-    .unwrap();
+        &DEFAULT_ACCOUNT_SECRET_KEY,
+    );
 
     let txn_request = {
         let initiator_addr = txn.initiator_addr().clone();
@@ -112,8 +110,7 @@ fn try_add_contract_version(
 pub fn new_transaction_v1_session(
     is_install_upgrade: bool,
     module_bytes: Bytes,
-    runtime: TransactionRuntime,
-    transferred_value: u64,
+    runtime: TransactionRuntimeParams,
     secret_key: &SecretKey,
 ) -> TransactionV1 {
     let timestamp = Timestamp::now();
@@ -122,8 +119,6 @@ pub fn new_transaction_v1_session(
         is_install_upgrade,
         module_bytes,
         runtime,
-        transferred_value,
-        seed: None,
     };
     let args = TransactionArgs::Named(RuntimeArgs::new());
     let entry_point = TransactionEntryPoint::Call;

@@ -31,7 +31,7 @@ use casper_types::{
     ContractWasmHash, DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions,
     GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers,
     ProtocolVersion, PublicKey, Rewards, SecretKey, SignedBlock, StoredValue, Transaction,
-    TransactionRuntime, TransactionV1Builder, Transfer, URef, U512,
+    Transfer, URef, U512,
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
