@@ -27,7 +27,7 @@ use crate::{
         auction::{Bid, BidKind, EraInfo, Unbond, UnbondingPurse, WithdrawPurse},
         prepayment::PrepaidKind,
     },
-    AddressableEntity, ByteCode, CLTyped, CLValue, DeployInfo, EntryPointValue, TransferV1,
+    AddressableEntity, ByteCode, CLValue, DeployInfo, EntryPointValue, TransferV1,
 };
 pub use global_state_identifier::GlobalStateIdentifier;
 pub use type_mismatch::TypeMismatch;
