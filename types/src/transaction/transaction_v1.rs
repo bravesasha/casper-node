@@ -1,9 +1,8 @@
-pub mod arg_handling;
+#[cfg(any(feature = "testing", test, feature = "json-schema"))]
+pub(crate) mod arg_handling;
 mod errors_v1;
 pub mod fields_container;
 mod transaction_args;
-#[cfg(any(feature = "std", test))]
-mod transaction_v1_builder;
 mod transaction_v1_hash;
 pub mod transaction_v1_payload;
 
@@ -17,7 +16,8 @@ use crate::{
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 use crate::{
-    testing::TestRng, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, LARGE_WASM_LANE_ID, MINT_LANE_ID,
+    testing::TestRng, TransactionConfig, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID,
+    LARGE_WASM_LANE_ID, MINT_LANE_ID,
 };
 #[cfg(any(feature = "std", test, feature = "testing"))]
 use alloc::collections::BTreeMap;
@@ -26,9 +26,13 @@ use alloc::{collections::BTreeSet, vec::Vec};
 use datasize::DataSize;
 use errors_v1::FieldDeserializationError;
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
+use fields_container::FieldsContainer;
+#[cfg(any(all(feature = "std", feature = "testing"), test))]
 use fields_container::{ENTRY_POINT_MAP_KEY, TARGET_MAP_KEY};
 #[cfg(any(feature = "once_cell", test))]
 use once_cell::sync::OnceCell;
+#[cfg(any(all(feature = "std", feature = "testing"), test))]
+use rand::Rng;
 #[cfg(feature = "json-schema")]
 use schemars::JsonSchema;
 #[cfg(any(feature = "std", test))]
@@ -54,8 +58,6 @@ pub use errors_v1::{
     InvalidTransaction as InvalidTransactionV1,
 };
 pub use transaction_args::TransactionArgs;
-#[cfg(any(feature = "std", test))]
-pub use transaction_v1_builder::{TransactionV1Builder, TransactionV1BuilderError};
 pub use transaction_v1_hash::TransactionV1Hash;
 
 use core::{
@@ -274,102 +276,134 @@ impl TransactionV1 {
         self
     }
 
-    /// Used by the `TestTransactionV1Builder` to inject invalid approvals for testing purposes.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub(super) fn apply_approvals(&mut self, approvals: Vec<Approval>) {
+    pub fn apply_approvals(&mut self, approvals: Vec<Approval>) {
         self.approvals.extend(approvals);
     }
 
+    /// Returns the payment amount if the txn is using classic mode.
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn payment_amount(&self) -> Option<u64> {
+        if let PricingMode::PaymentLimited { payment_amount, .. } = self.pricing_mode() {
+            Some(*payment_amount)
+        } else {
+            None
+        }
+    }
+
     /// Returns a random, valid but possibly expired transaction.
-    ///
-    /// Note that the [`TransactionV1Builder`] can be used to create a random transaction with
-    /// more specific values.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random(rng: &mut TestRng) -> Self {
-        TransactionV1Builder::new_random(rng).build().unwrap()
+        let secret_key = SecretKey::random(rng);
+        let ttl_millis = rng.gen_range(60_000..TransactionConfig::default().max_ttl.millis());
+        let timestamp = Timestamp::random(rng);
+        let container = FieldsContainer::random(rng);
+        let initiator_addr_and_secret_key = InitiatorAddrAndSecretKey::SecretKey(&secret_key);
+        let pricing_mode = PricingMode::Fixed {
+            gas_price_tolerance: 5,
+            additional_computation_factor: 0,
+        };
+        TransactionV1::build(
+            rng.random_string(5..10),
+            timestamp,
+            TimeDiff::from_millis(ttl_millis),
+            pricing_mode,
+            container.to_map().unwrap(),
+            initiator_addr_and_secret_key,
+        )
+    }
+
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_lane_and_timestamp_and_ttl(
+        rng: &mut TestRng,
+        lane: u8,
+        maybe_timestamp: Option<Timestamp>,
+        ttl: Option<TimeDiff>,
+    ) -> Self {
+        let secret_key = SecretKey::random(rng);
+        let timestamp = maybe_timestamp.unwrap_or_else(Timestamp::now);
+        let ttl_millis = ttl.map_or(
+            rng.gen_range(60_000..TransactionConfig::default().max_ttl.millis()),
+            |ttl| ttl.millis(),
+        );
+        let container = FieldsContainer::random_of_lane(rng, lane);
+        let initiator_addr_and_secret_key = InitiatorAddrAndSecretKey::SecretKey(&secret_key);
+        let pricing_mode = PricingMode::Fixed {
+            gas_price_tolerance: 5,
+            additional_computation_factor: 0,
+        };
+        TransactionV1::build(
+            rng.random_string(5..10),
+            timestamp,
+            TimeDiff::from_millis(ttl_millis),
+            pricing_mode,
+            container.to_map().unwrap(),
+            initiator_addr_and_secret_key,
+        )
+    }
+
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_timestamp_and_ttl(
+        rng: &mut TestRng,
+        maybe_timestamp: Option<Timestamp>,
+        ttl: Option<TimeDiff>,
+    ) -> Self {
+        Self::random_with_lane_and_timestamp_and_ttl(
+            rng,
+            INSTALL_UPGRADE_LANE_ID,
+            maybe_timestamp,
+            ttl,
+        )
     }
 
     /// Returns a random transaction with "transfer" category.
-    ///
-    /// Note that the [`TransactionV1Builder`] can be used to create a random transaction with
-    /// more specific values.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_transfer(
         rng: &mut TestRng,
         timestamp: Option<Timestamp>,
         ttl: Option<TimeDiff>,
     ) -> Self {
-        let transaction_v1 = TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
-            rng,
-            MINT_LANE_ID,
-            timestamp,
-            ttl,
-        )
-        .build()
-        .unwrap();
-        transaction_v1
+        TransactionV1::random_with_lane_and_timestamp_and_ttl(rng, MINT_LANE_ID, timestamp, ttl)
     }
 
     /// Returns a random transaction with "standard" category.
-    ///
-    /// Note that the [`TransactionV1Builder`] can be used to create a random transaction with
-    /// more specific values.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_wasm(
         rng: &mut TestRng,
         timestamp: Option<Timestamp>,
         ttl: Option<TimeDiff>,
     ) -> Self {
-        let transaction = TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+        TransactionV1::random_with_lane_and_timestamp_and_ttl(
             rng,
             LARGE_WASM_LANE_ID,
             timestamp,
             ttl,
         )
-        .build()
-        .unwrap();
-        transaction
     }
 
     /// Returns a random transaction with "install/upgrade" category.
-    ///
-    /// Note that the [`TransactionV1Builder`] can be used to create a random transaction with
-    /// more specific values.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_auction(
         rng: &mut TestRng,
         timestamp: Option<Timestamp>,
         ttl: Option<TimeDiff>,
     ) -> Self {
-        TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
-            rng,
-            AUCTION_LANE_ID,
-            timestamp,
-            ttl,
-        )
-        .build()
-        .unwrap()
+        TransactionV1::random_with_lane_and_timestamp_and_ttl(rng, AUCTION_LANE_ID, timestamp, ttl)
     }
 
     /// Returns a random transaction with "install/upgrade" category.
-    ///
-    /// Note that the [`TransactionV1Builder`] can be used to create a random transaction with
-    /// more specific values.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_install_upgrade(
         rng: &mut TestRng,
         timestamp: Option<Timestamp>,
         ttl: Option<TimeDiff>,
     ) -> Self {
-        let transaction = TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+        TransactionV1::random_with_lane_and_timestamp_and_ttl(
             rng,
             INSTALL_UPGRADE_LANE_ID,
             timestamp,
             ttl,
         )
-        .build()
-        .unwrap();
-        transaction
     }
 
     /// Returns result of attempting to deserailize a field from the amorphic `fields` container.

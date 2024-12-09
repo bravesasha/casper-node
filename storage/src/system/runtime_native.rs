@@ -474,7 +474,7 @@ where
         &self.context_key
     }
 
-    /// Returns the addressable entity being used by this instance.
+    /// Returns a reference to the runtime footprint used by this instance.
     pub fn runtime_footprint(&self) -> &RuntimeFootprint {
         &self.runtime_footprint
     }

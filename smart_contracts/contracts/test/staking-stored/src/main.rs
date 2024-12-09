@@ -10,8 +10,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, AddressableEntityHash, ApiError, CLType, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef,
+    contracts::NamedKeys, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    EntryPointType, EntryPoints, Key, Parameter, URef,
 };
 
 #[repr(u16)]
@@ -38,16 +38,13 @@ fn entry_points() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
 
     entry_points.add_entry_point(EntryPoint::new(
-        staking::ENTRY_POINT_STAKING,
-        vec![Parameter::new(staking::ARG_AMOUNT, CLType::U512)],
-        CLType::Unit,
-        EntryPointAccess::Public,
-        EntryPointType::Called,
-        EntryPointPayment::Caller,
-    ));
-    entry_points.add_entry_point(EntryPoint::new(
-        staking::ENTRY_POINT_UNSTAKING,
-        vec![Parameter::new(staking::ARG_AMOUNT, CLType::U512)],
+        staking::ENTRY_POINT_RUN,
+        vec![
+            Parameter::new(staking::ARG_ACTION, CLType::String),
+            Parameter::new(staking::ARG_AMOUNT, CLType::U512),
+            Parameter::new(staking::ARG_VALIDATOR, CLType::PublicKey),
+            Parameter::new(staking::ARG_NEW_VALIDATOR, CLType::PublicKey),
+        ],
         CLType::Unit,
         EntryPointAccess::Public,
         EntryPointType::Called,
@@ -75,11 +72,8 @@ pub extern "C" fn call() {
         staking::CONTRACT_VERSION,
         storage::new_uref(contract_version).into(),
     );
-    runtime::put_key(
-        staking::CONTRACT_NAME,
-        Key::contract_entity_key(AddressableEntityHash::new(contract_hash.value())),
-    );
-    runtime::put_key(staking::STAKING_PURSE, staking_purse.into());
+
+    runtime::put_key(staking::CONTRACT_NAME, Key::Hash(contract_hash.value()));
 
     // Initial funding amount.
     let amount = runtime::get_named_arg(staking::ARG_AMOUNT);

@@ -18,32 +18,6 @@ use crate::{
 
 use super::StorageCosts;
 
-/// Default number of validator slots.
-pub const DEFAULT_VALIDATOR_SLOTS: u32 = 5;
-/// Default auction delay.
-pub const DEFAULT_AUCTION_DELAY: u64 = 1;
-/// Default lock-in period is currently zero.
-pub const DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS: u64 = 0;
-/// Default number of eras that need to pass to be able to withdraw unbonded funds.
-pub const DEFAULT_UNBONDING_DELAY: u64 = 7;
-/// Default round seigniorage rate represented as a fractional number.
-///
-/// Annual issuance: 2%
-/// Minimum round exponent: 14
-/// Ticks per year: 31536000000
-///
-/// (1+0.02)^((2^14)/31536000000)-1 is expressed as a fraction below.
-pub const DEFAULT_ROUND_SEIGNIORAGE_RATE: Ratio<u64> = Ratio::new_raw(7, 175070816);
-/// Default genesis timestamp in milliseconds.
-pub const DEFAULT_GENESIS_TIMESTAMP_MILLIS: u64 = 0;
-/// Default gas hold interval in milliseconds.
-pub const DEFAULT_GAS_HOLD_INTERVAL_MILLIS: u64 = 24 * 60 * 60 * 60;
-
-/// Default gas hold balance handling.
-pub const DEFAULT_GAS_HOLD_BALANCE_HANDLING: HoldBalanceHandling = HoldBalanceHandling::Accrued;
-
-pub const DEFAULT_ENABLE_ENTITY: bool = false;
-
 /// Represents the details of a genesis process.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GenesisConfig {
@@ -64,13 +38,6 @@ pub struct GenesisConfig {
 
 impl GenesisConfig {
     /// Creates a new genesis configuration.
-    ///
-    /// New code should use [`GenesisConfigBuilder`] instead as some config options will otherwise
-    /// be defaulted.
-    #[deprecated(
-        since = "3.0.0",
-        note = "prefer to use ExecConfigBuilder to construct an ExecConfig"
-    )]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         accounts: Vec<GenesisAccount>,
@@ -264,145 +231,6 @@ impl Distribution<GenesisConfig> for Standard {
     }
 }
 
-/// A builder for an [`GenesisConfig`].
-///
-/// Any field that isn't specified will be defaulted.  See [the module docs](index.html) for the set
-/// of default values.
-#[derive(Default, Debug)]
-pub struct GenesisConfigBuilder {
-    accounts: Option<Vec<GenesisAccount>>,
-    wasm_config: Option<WasmConfig>,
-    system_config: Option<SystemConfig>,
-    validator_slots: Option<u32>,
-    auction_delay: Option<u64>,
-    locked_funds_period_millis: Option<u64>,
-    round_seigniorage_rate: Option<Ratio<u64>>,
-    unbonding_delay: Option<u64>,
-    genesis_timestamp_millis: Option<u64>,
-    gas_hold_balance_handling: Option<HoldBalanceHandling>,
-    gas_hold_interval_millis: Option<u64>,
-    enable_addressable_entity: Option<bool>,
-    storage_costs: Option<StorageCosts>,
-}
-
-impl GenesisConfigBuilder {
-    /// Creates a new `ExecConfig` builder.
-    pub fn new() -> Self {
-        GenesisConfigBuilder::default()
-    }
-
-    /// Sets the genesis accounts.
-    pub fn with_accounts(mut self, accounts: Vec<GenesisAccount>) -> Self {
-        self.accounts = Some(accounts);
-        self
-    }
-
-    /// Sets the Wasm config options.
-    pub fn with_wasm_config(mut self, wasm_config: WasmConfig) -> Self {
-        self.wasm_config = Some(wasm_config);
-        self
-    }
-
-    /// Sets the system config options.
-    pub fn with_system_config(mut self, system_config: SystemConfig) -> Self {
-        self.system_config = Some(system_config);
-        self
-    }
-
-    /// Sets the validator slots config option.
-    pub fn with_validator_slots(mut self, validator_slots: u32) -> Self {
-        self.validator_slots = Some(validator_slots);
-        self
-    }
-
-    /// Sets the auction delay config option.
-    pub fn with_auction_delay(mut self, auction_delay: u64) -> Self {
-        self.auction_delay = Some(auction_delay);
-        self
-    }
-
-    /// Sets the locked funds period config option.
-    pub fn with_locked_funds_period_millis(mut self, locked_funds_period_millis: u64) -> Self {
-        self.locked_funds_period_millis = Some(locked_funds_period_millis);
-        self
-    }
-
-    /// Sets the round seigniorage rate config option.
-    pub fn with_round_seigniorage_rate(mut self, round_seigniorage_rate: Ratio<u64>) -> Self {
-        self.round_seigniorage_rate = Some(round_seigniorage_rate);
-        self
-    }
-
-    /// Sets the unbonding delay config option.
-    pub fn with_unbonding_delay(mut self, unbonding_delay: u64) -> Self {
-        self.unbonding_delay = Some(unbonding_delay);
-        self
-    }
-
-    /// Sets the genesis timestamp config option.
-    pub fn with_genesis_timestamp_millis(mut self, genesis_timestamp_millis: u64) -> Self {
-        self.genesis_timestamp_millis = Some(genesis_timestamp_millis);
-        self
-    }
-
-    /// Sets the gas hold interval config option expressed as milliseconds.
-    pub fn with_gas_hold_interval_millis(mut self, gas_hold_interval_millis: u64) -> Self {
-        self.gas_hold_interval_millis = Some(gas_hold_interval_millis);
-        self
-    }
-
-    /// Sets the gas hold balance handling.
-    pub fn with_gas_hold_balance_handling(
-        mut self,
-        gas_hold_balance_handling: HoldBalanceHandling,
-    ) -> Self {
-        self.gas_hold_balance_handling = Some(gas_hold_balance_handling);
-        self
-    }
-
-    pub fn with_enable_addressable_entity(mut self, enable_addressable_entity: bool) -> Self {
-        self.enable_addressable_entity = Some(enable_addressable_entity);
-        self
-    }
-
-    /// Sets the storage_costs handling.
-    pub fn with_storage_costs(mut self, storage_costs: StorageCosts) -> Self {
-        self.storage_costs = Some(storage_costs);
-        self
-    }
-
-    /// Builds a new [`GenesisConfig`] object.
-    pub fn build(self) -> GenesisConfig {
-        GenesisConfig {
-            accounts: self.accounts.unwrap_or_default(),
-            wasm_config: self.wasm_config.unwrap_or_default(),
-            system_config: self.system_config.unwrap_or_default(),
-            validator_slots: self.validator_slots.unwrap_or(DEFAULT_VALIDATOR_SLOTS),
-            auction_delay: self.auction_delay.unwrap_or(DEFAULT_AUCTION_DELAY),
-            locked_funds_period_millis: self
-                .locked_funds_period_millis
-                .unwrap_or(DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS),
-            round_seigniorage_rate: self
-                .round_seigniorage_rate
-                .unwrap_or(DEFAULT_ROUND_SEIGNIORAGE_RATE),
-            unbonding_delay: self.unbonding_delay.unwrap_or(DEFAULT_UNBONDING_DELAY),
-            genesis_timestamp_millis: self
-                .genesis_timestamp_millis
-                .unwrap_or(DEFAULT_GENESIS_TIMESTAMP_MILLIS),
-            gas_hold_balance_handling: self
-                .gas_hold_balance_handling
-                .unwrap_or(DEFAULT_GAS_HOLD_BALANCE_HANDLING),
-            gas_hold_interval_millis: self
-                .gas_hold_interval_millis
-                .unwrap_or(DEFAULT_GAS_HOLD_INTERVAL_MILLIS),
-            enable_addressable_entity: self
-                .enable_addressable_entity
-                .unwrap_or(DEFAULT_ENABLE_ENTITY),
-            storage_costs: self.storage_costs.unwrap_or_default(),
-        }
-    }
-}
-
 impl From<&Chainspec> for GenesisConfig {
     fn from(chainspec: &Chainspec) -> Self {
         let genesis_timestamp_millis = chainspec
@@ -413,21 +241,20 @@ impl From<&Chainspec> for GenesisConfig {
         let gas_hold_interval_millis = chainspec.core_config.gas_hold_interval.millis();
         let gas_hold_balance_handling = chainspec.core_config.gas_hold_balance_handling;
         let storage_costs = chainspec.storage_costs;
-
-        GenesisConfigBuilder::default()
-            .with_accounts(chainspec.network_config.accounts_config.clone().into())
-            .with_wasm_config(chainspec.wasm_config)
-            .with_system_config(chainspec.system_costs_config)
-            .with_validator_slots(chainspec.core_config.validator_slots)
-            .with_auction_delay(chainspec.core_config.auction_delay)
-            .with_locked_funds_period_millis(chainspec.core_config.locked_funds_period.millis())
-            .with_round_seigniorage_rate(chainspec.core_config.round_seigniorage_rate)
-            .with_unbonding_delay(chainspec.core_config.unbonding_delay)
-            .with_genesis_timestamp_millis(genesis_timestamp_millis)
-            .with_gas_hold_balance_handling(gas_hold_balance_handling)
-            .with_gas_hold_interval_millis(gas_hold_interval_millis)
-            .with_enable_addressable_entity(chainspec.core_config.enable_addressable_entity)
-            .with_storage_costs(storage_costs)
-            .build()
+        GenesisConfig {
+            accounts: chainspec.network_config.accounts_config.clone().into(),
+            wasm_config: chainspec.wasm_config,
+            system_config: chainspec.system_costs_config,
+            validator_slots: chainspec.core_config.validator_slots,
+            auction_delay: chainspec.core_config.auction_delay,
+            locked_funds_period_millis: chainspec.core_config.locked_funds_period.millis(),
+            round_seigniorage_rate: chainspec.core_config.round_seigniorage_rate,
+            unbonding_delay: chainspec.core_config.unbonding_delay,
+            genesis_timestamp_millis,
+            gas_hold_balance_handling,
+            gas_hold_interval_millis,
+            enable_addressable_entity: chainspec.core_config.enable_addressable_entity,
+            storage_costs,
+        }
     }
 }

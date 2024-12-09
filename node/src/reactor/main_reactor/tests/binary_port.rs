@@ -31,7 +31,7 @@ use casper_types::{
     ContractWasmHash, DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions,
     GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers,
     ProtocolVersion, PublicKey, Rewards, SecretKey, SignedBlock, StoredValue, Transaction,
-    TransactionV1Builder, Transfer, URef, U512,
+    Transfer, URef, U512,
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
@@ -43,7 +43,7 @@ use crate::{
     testing::{
         self, filter_reactor::FilterReactor, network::TestingNetwork, ConditionCheckReactor,
     },
-    types::NodeId,
+    types::{transaction::transaction_v1_builder::TransactionV1Builder, NodeId},
 };
 
 use super::{InitialStakes, TestFixture, ERA_ONE};
@@ -1336,7 +1336,7 @@ fn try_accept_transaction(key: &SecretKey) -> TestCase {
         TransactionV1Builder::new_targeting_invocable_entity_via_alias(
             "Test",
             "call",
-            casper_types::TransactionStoredRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_secret_key(key)
         .with_chain_name("casper-example")

@@ -2,15 +2,16 @@ use num_traits::Zero;
 use once_cell::sync::Lazy;
 
 use casper_engine_test_support::{
-    ChainspecConfig, LmdbWasmTestBuilder, DEFAULT_AUCTION_DELAY, DEFAULT_CHAINSPEC_REGISTRY,
-    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PROTOCOL_VERSION,
-    DEFAULT_ROUND_SEIGNIORAGE_RATE, DEFAULT_STORAGE_COSTS, DEFAULT_SYSTEM_CONFIG,
-    DEFAULT_UNBONDING_DELAY, DEFAULT_VALIDATOR_SLOTS, DEFAULT_WASM_CONFIG,
+    genesis_config_builder::GenesisConfigBuilder, ChainspecConfig, LmdbWasmTestBuilder,
+    DEFAULT_AUCTION_DELAY, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
+    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE,
+    DEFAULT_STORAGE_COSTS, DEFAULT_SYSTEM_CONFIG, DEFAULT_UNBONDING_DELAY, DEFAULT_VALIDATOR_SLOTS,
+    DEFAULT_WASM_CONFIG,
 };
 use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
-    account::AccountHash, system::auction::DelegationRate, GenesisAccount, GenesisConfigBuilder,
-    GenesisValidator, Key, Motes, ProtocolVersion, PublicKey, SecretKey, StoredValue, U512,
+    account::AccountHash, system::auction::DelegationRate, GenesisAccount, GenesisValidator, Key,
+    Motes, ProtocolVersion, PublicKey, SecretKey, StoredValue, U512,
 };
 
 const GENESIS_CONFIG_HASH: [u8; 32] = [127; 32];

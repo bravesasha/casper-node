@@ -40,7 +40,7 @@ use casper_types::{
 };
 #[cfg(test)]
 use casper_types::{
-    execution::ExecutionResultV2, testing::TestRng, Deploy, TestBlockBuilder, TransactionV1Builder,
+    execution::ExecutionResultV2, testing::TestRng, Deploy, TestBlockBuilder, TransactionV1,
 };
 
 /// The URL root path.
@@ -148,11 +148,7 @@ impl SseData {
         let txn = if rng.gen() {
             Transaction::from(Deploy::random_with_timestamp_and_ttl(rng, timestamp, ttl))
         } else {
-            let txn = TransactionV1Builder::new_random(rng)
-                .with_timestamp(timestamp)
-                .with_ttl(ttl)
-                .build()
-                .unwrap();
+            let txn = TransactionV1::random_with_timestamp_and_ttl(rng, Some(timestamp), Some(ttl));
             Transaction::from(txn)
         };
 

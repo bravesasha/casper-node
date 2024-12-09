@@ -12,13 +12,13 @@ use casper_execution_engine::engine_state::{EngineConfig, EngineConfigBuilder};
 use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     system::auction::VESTING_SCHEDULE_LENGTH_MILLIS, CoreConfig, FeeHandling, GenesisAccount,
-    GenesisConfig, GenesisConfigBuilder, MintCosts, PricingHandling, ProtocolVersion,
-    RefundHandling, StorageCosts, SystemConfig, TimeDiff, WasmConfig,
+    GenesisConfig, MintCosts, PricingHandling, ProtocolVersion, RefundHandling, StorageCosts,
+    SystemConfig, TimeDiff, WasmConfig,
 };
 
 use crate::{
-    DEFAULT_ACCOUNTS, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_GENESIS_CONFIG_HASH,
-    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_MAX_QUERY_DEPTH,
+    GenesisConfigBuilder, DEFAULT_ACCOUNTS, DEFAULT_CHAINSPEC_REGISTRY,
+    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_MAX_QUERY_DEPTH,
 };
 
 /// The name of the chainspec file on disk.

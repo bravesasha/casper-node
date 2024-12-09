@@ -12,20 +12,22 @@ mod chainspec_config;
 pub mod deploy_item;
 mod deploy_item_builder;
 mod execute_request_builder;
+pub mod genesis_config_builder;
 mod step_request_builder;
 mod transfer_request_builder;
 mod upgrade_request_builder;
 pub mod utils;
 mod wasm_test_builder;
 
+pub(crate) use genesis_config_builder::GenesisConfigBuilder;
 use num_rational::Ratio;
 use once_cell::sync::Lazy;
 
 use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     account::AccountHash, testing::TestRng, ChainspecRegistry, Digest, GenesisAccount,
-    GenesisConfig, GenesisConfigBuilder, Motes, ProtocolVersion, PublicKey, SecretKey,
-    StorageCosts, SystemConfig, WasmConfig, WasmV1Config, U512,
+    GenesisConfig, HoldBalanceHandling, Motes, ProtocolVersion, PublicKey, SecretKey, StorageCosts,
+    SystemConfig, WasmConfig, WasmV1Config, U512,
 };
 
 pub use chainspec_config::{ChainspecConfig, CHAINSPEC_SYMLINK};
@@ -69,6 +71,10 @@ pub const DEFAULT_GAS_PRICE: u8 = 1;
 pub const ARG_AMOUNT: &str = "amount";
 /// Timestamp increment in milliseconds.
 pub const TIMESTAMP_MILLIS_INCREMENT: u64 = 30_000; // 30 seconds
+/// Default gas hold balance handling.
+pub const DEFAULT_GAS_HOLD_BALANCE_HANDLING: HoldBalanceHandling = HoldBalanceHandling::Accrued;
+/// Default gas hold interval in milliseconds.
+pub const DEFAULT_GAS_HOLD_INTERVAL_MILLIS: u64 = 24 * 60 * 60 * 60;
 
 /// Default value for maximum associated keys configuration option.
 pub const DEFAULT_MAX_ASSOCIATED_KEYS: u32 = 100;

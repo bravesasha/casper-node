@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::lmdb_fixture;
 use casper_engine_test_support::{
     utils, ExecuteRequestBuilder, LmdbWasmTestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNT_ADDR,
@@ -8,9 +10,11 @@ use casper_execution_engine::{
     execution::ExecError,
 };
 use casper_types::{
-    ApiError, BlockTime, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion, RuntimeArgs,
-    Transaction, TransactionArgs, TransactionEntryPoint, TransactionSessionRuntimeParams,
-    TransactionTarget, TransactionV1Builder,
+    bytesrepr::{Bytes, ToBytes},
+    ApiError, BlockTime, Digest, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion,
+    PublicKey, RuntimeArgs, SecretKey, TimeDiff, Timestamp, Transaction, TransactionArgs,
+    TransactionEntryPoint, TransactionRuntimeParams, TransactionScheduling, TransactionTarget,
+    TransactionV1, TransactionV1Payload,
 };
 
 const CONTRACT: &str = "do_nothing_stored.wasm";
@@ -20,6 +24,7 @@ const BLOCK_TIME: BlockTime = BlockTime::new(10);
 pub(crate) const ARGS_MAP_KEY: u16 = 0;
 pub(crate) const TARGET_MAP_KEY: u16 = 1;
 pub(crate) const ENTRY_POINT_MAP_KEY: u16 = 2;
+pub(crate) const SCHEDULING_MAP_KEY: u16 = 3;
 
 #[ignore]
 #[test]
@@ -41,15 +46,12 @@ fn try_add_contract_version(
 ) {
     let module_bytes = utils::read_wasm_file(CONTRACT);
 
-    let txn = TransactionV1Builder::new_session(
+    let txn = new_transaction_v1_session(
         is_install_upgrade,
         module_bytes,
-        TransactionSessionRuntimeParams::VmCasperV1,
-    )
-    .with_secret_key(&DEFAULT_ACCOUNT_SECRET_KEY)
-    .with_chain_name(CHAIN_NAME)
-    .build()
-    .unwrap();
+        TransactionRuntimeParams::VmCasperV1,
+        &DEFAULT_ACCOUNT_SECRET_KEY,
+    );
 
     let txn_request = {
         let initiator_addr = txn.initiator_addr().clone();
@@ -103,6 +105,72 @@ fn try_add_contract_version(
             ApiError::NotAllowedToAddContractVersion,
         )))
     }
+}
+
+pub fn new_transaction_v1_session(
+    is_install_upgrade: bool,
+    module_bytes: Bytes,
+    runtime: TransactionRuntimeParams,
+    secret_key: &SecretKey,
+) -> TransactionV1 {
+    let timestamp = Timestamp::now();
+
+    let target = TransactionTarget::Session {
+        is_install_upgrade,
+        module_bytes,
+        runtime,
+    };
+    let args = TransactionArgs::Named(RuntimeArgs::new());
+    let entry_point = TransactionEntryPoint::Call;
+    let scheduling = TransactionScheduling::Standard;
+    let mut fields: BTreeMap<u16, Bytes> = BTreeMap::new();
+
+    fields.insert(ARGS_MAP_KEY, args.to_bytes().unwrap().into());
+    fields.insert(TARGET_MAP_KEY, target.to_bytes().unwrap().into());
+    fields.insert(ENTRY_POINT_MAP_KEY, entry_point.to_bytes().unwrap().into());
+    fields.insert(SCHEDULING_MAP_KEY, scheduling.to_bytes().unwrap().into());
+
+    let public_key = PublicKey::from(secret_key);
+    let initiator_addr = InitiatorAddr::from(public_key);
+    build_transaction(
+        CHAIN_NAME.to_string(),
+        timestamp,
+        TimeDiff::from_millis(30 * 60 * 1_000),
+        PricingMode::Fixed {
+            gas_price_tolerance: 5,
+            additional_computation_factor: 0,
+        },
+        fields,
+        initiator_addr,
+        secret_key,
+    )
+}
+
+fn build_transaction(
+    chain_name: String,
+    timestamp: Timestamp,
+    ttl: TimeDiff,
+    pricing_mode: PricingMode,
+    fields: BTreeMap<u16, Bytes>,
+    initiator_addr: InitiatorAddr,
+    secret_key: &SecretKey,
+) -> TransactionV1 {
+    let transaction_v1_payload = TransactionV1Payload::new(
+        chain_name,
+        timestamp,
+        ttl,
+        pricing_mode,
+        initiator_addr,
+        fields,
+    );
+    let hash = Digest::hash(
+        transaction_v1_payload
+            .to_bytes()
+            .unwrap_or_else(|error| panic!("should serialize body: {}", error)),
+    );
+    let mut transaction = TransactionV1::new(hash.into(), transaction_v1_payload, BTreeSet::new());
+    transaction.sign(secret_key);
+    transaction
 }
 
 /// if it becomes necessary to extract deploy session data:

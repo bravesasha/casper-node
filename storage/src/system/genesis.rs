@@ -44,10 +44,9 @@ use casper_types::{
     AccessRights, AddressableEntity, AddressableEntityHash, AdministratorAccount, BlockGlobalAddr,
     BlockTime, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLValue, Chainspec,
     ChainspecRegistry, Digest, EntityAddr, EntityVersions, EntryPointAddr, EntryPointValue,
-    EntryPoints, EraId, FeeHandling, GenesisAccount, GenesisConfig, GenesisConfigBuilder, Groups,
-    HashAddr, Key, Motes, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, PublicKey,
-    RefundHandling, StoredValue, SystemConfig, SystemHashRegistry, Tagged, TimeDiff, URef,
-    WasmConfig, U512,
+    EntryPoints, EraId, FeeHandling, GenesisAccount, GenesisConfig, Groups, HashAddr, Key, Motes,
+    Package, PackageHash, PackageStatus, Phase, ProtocolVersion, PublicKey, RefundHandling,
+    StoredValue, SystemConfig, SystemHashRegistry, Tagged, TimeDiff, URef, WasmConfig, U512,
 };
 
 use crate::{

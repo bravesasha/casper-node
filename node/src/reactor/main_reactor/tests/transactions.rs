@@ -9,7 +9,7 @@ use casper_types::{
     addressable_entity::NamedKeyAddr,
     runtime_args,
     system::mint::{ARG_AMOUNT, ARG_TARGET},
-    AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionSessionRuntimeParams,
+    AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionRuntimeParams,
     LARGE_WASM_LANE_ID,
 };
 use once_cell::sync::Lazy;
@@ -33,7 +33,7 @@ static CHARLIE_SECRET_KEY: Lazy<Arc<SecretKey>> = Lazy::new(|| {
 static CHARLIE_PUBLIC_KEY: Lazy<PublicKey> =
     Lazy::new(|| PublicKey::from(&*CHARLIE_SECRET_KEY.clone()));
 
-const MIN_GAS_PRICE: u8 = 5;
+const MIN_GAS_PRICE: u8 = 1;
 const CHAIN_NAME: &str = "single-transaction-test-net";
 
 async fn transfer_to_account<A: Into<U512>>(
@@ -99,7 +99,7 @@ async fn send_wasm_transaction(
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(chain_name)
         .with_pricing_mode(pricing)
@@ -1022,8 +1022,6 @@ impl SingleTransactionTestCase {
         ConfigsOverride::default()
             .with_minimum_era_height(5) // make the era longer so that the transaction doesn't land in the switch block.
             .with_balance_hold_interval(TimeDiff::from_seconds(5))
-            .with_min_gas_price(MIN_GAS_PRICE)
-            .with_max_gas_price(MIN_GAS_PRICE)
             .with_chain_name("single-transaction-test-net".to_string())
     }
 
@@ -1772,7 +1770,7 @@ async fn only_refunds_are_burnt_no_fee_custom_payment() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(PricingMode::PaymentLimited {
@@ -1873,7 +1871,7 @@ async fn no_refund_no_fee_custom_payment() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionSessionRuntimeParams::VmCasperV1,
+            TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(PricingMode::PaymentLimited {
@@ -2437,7 +2435,7 @@ fn invalid_wasm_txn(initiator: Arc<SecretKey>, pricing_mode: PricingMode) -> Tra
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(pricing_mode)
@@ -3038,25 +3036,27 @@ async fn insufficient_funds_transfer_from_account() {
 
     let transfer_amount = U512::max_value();
 
-    let mut txn = Transaction::from(
+    let txn_v1 =
         TransactionV1Builder::new_transfer(transfer_amount, None, ALICE_PUBLIC_KEY.clone(), None)
             .unwrap()
             .with_chain_name(CHAIN_NAME)
             .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
             .build()
-            .unwrap(),
-    );
+            .unwrap();
+    let price = txn_v1
+        .payment_amount()
+        .expect("must have payment amount as txns are using classic");
+    let mut txn = Transaction::from(txn_v1);
     txn.sign(&BOB_SECRET_KEY);
 
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let transfer_cost: U512 =
-        U512::from(test.chainspec().system_costs_config.mint_costs().transfer) * MIN_GAS_PRICE;
+    let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
 
     assert_eq!(result.error_message.as_deref(), Some("Insufficient funds"));
-    assert_eq!(result.cost, transfer_cost);
+    assert_eq!(result.cost, expected_cost);
 }
 
 #[tokio::test]
@@ -3082,22 +3082,22 @@ async fn insufficient_funds_add_bid() {
     let (_, bob_initial_balance, _) = test.get_balances(None);
     let bid_amount = bob_initial_balance.total;
 
-    let mut txn = Transaction::from(
+    let txn =
         TransactionV1Builder::new_add_bid(BOB_PUBLIC_KEY.clone(), 0, bid_amount, None, None, None)
             .unwrap()
             .with_chain_name(CHAIN_NAME)
             .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
             .build()
-            .unwrap(),
-    );
+            .unwrap();
+    let price = txn.payment_amount().expect("must get payment amount");
+    let mut txn = Transaction::from(txn);
     txn.sign(&BOB_SECRET_KEY);
 
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let bid_cost: U512 =
-        U512::from(test.chainspec().system_costs_config.auction_costs().add_bid) * MIN_GAS_PRICE;
+    let bid_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
 
     assert_eq!(
         result.error_message.as_deref(),
@@ -3142,7 +3142,7 @@ async fn insufficient_funds_transfer_from_purse() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_runtime_args(runtime_args! { "destination" => purse_name, "amount" => U512::zero() })
         .with_chain_name(CHAIN_NAME)
@@ -3166,27 +3166,26 @@ async fn insufficient_funds_transfer_from_purse() {
 
     // now we try to transfer from the purse we just created
     let transfer_amount = U512::max_value();
-    let mut txn = Transaction::from(
-        TransactionV1Builder::new_transfer(
-            transfer_amount,
-            Some(uref),
-            ALICE_PUBLIC_KEY.clone(),
-            None,
-        )
-        .unwrap()
-        .with_chain_name(CHAIN_NAME)
-        .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
-        .build()
-        .unwrap(),
-    );
+    let txn = TransactionV1Builder::new_transfer(
+        transfer_amount,
+        Some(uref),
+        ALICE_PUBLIC_KEY.clone(),
+        None,
+    )
+    .unwrap()
+    .with_chain_name(CHAIN_NAME)
+    .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
+    .build()
+    .unwrap();
+    let price = txn.payment_amount().expect("must get payment amount");
+    let mut txn = Transaction::from(txn);
     txn.sign(&BOB_SECRET_KEY);
 
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let transfer_cost: U512 =
-        U512::from(test.chainspec().system_costs_config.mint_costs().transfer) * MIN_GAS_PRICE;
+    let transfer_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
 
     assert_eq!(result.error_message.as_deref(), Some("Insufficient funds"));
     assert_eq!(result.cost, transfer_cost);
@@ -3214,22 +3213,22 @@ async fn insufficient_funds_when_caller_lacks_minimum_balance() {
 
     let (_, bob_initial_balance, _) = test.get_balances(None);
     let transfer_amount = bob_initial_balance.total - U512::one();
-    let mut txn = Transaction::from(
+    let txn =
         TransactionV1Builder::new_transfer(transfer_amount, None, ALICE_PUBLIC_KEY.clone(), None)
             .unwrap()
             .with_chain_name(CHAIN_NAME)
             .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
             .build()
-            .unwrap(),
-    );
+            .unwrap();
+    let price = txn.payment_amount().expect("must get payment amount");
+    let mut txn = Transaction::from(txn);
     txn.sign(&BOB_SECRET_KEY);
 
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let transfer_cost: U512 =
-        U512::from(test.chainspec().system_costs_config.mint_costs().transfer) * MIN_GAS_PRICE;
+    let transfer_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
 
     assert_eq!(result.error_message.as_deref(), Some("Insufficient funds"));
     assert_eq!(result.cost, transfer_cost);
@@ -3269,7 +3268,7 @@ async fn charge_when_session_code_succeeds() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_runtime_args(runtime_args! {
             ARG_TARGET => CHARLIE_PUBLIC_KEY.to_account_hash(),
@@ -3340,7 +3339,7 @@ async fn charge_when_session_code_fails_with_user_error() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())
@@ -3408,7 +3407,7 @@ async fn charge_when_session_code_runs_out_of_gas() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())
@@ -3477,7 +3476,7 @@ async fn successful_purse_to_purse_transfer() {
         Bytes::from(std::fs::read(purse_create_contract).expect("cannot read module bytes"));
 
     let mut txn = Transaction::from(
-        TransactionV1Builder::new_session(false, module_bytes,TransactionSessionRuntimeParams::VmCasperV1)
+        TransactionV1Builder::new_session(false, module_bytes, TransactionRuntimeParams::VmCasperV1)
             .with_runtime_args(
                 runtime_args! { "destination" => purse_name, "amount" => U512::from(MAX_PAYMENT_AMOUNT) + U512::one() },
             )
@@ -3570,7 +3569,7 @@ async fn successful_purse_to_account_transfer() {
         Bytes::from(std::fs::read(purse_create_contract).expect("cannot read module bytes"));
 
     let mut txn = Transaction::from(
-        TransactionV1Builder::new_session(false, module_bytes, TransactionSessionRuntimeParams::VmCasperV1)
+        TransactionV1Builder::new_session(false, module_bytes, TransactionRuntimeParams::VmCasperV1)
             .with_runtime_args(
                 runtime_args! { "destination" => purse_name, "amount" => U512::from(MAX_PAYMENT_AMOUNT) + U512::one() },
             )
@@ -3734,7 +3733,7 @@ async fn out_of_gas_txn_does_not_produce_effects() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            casper_types::TransactionSessionRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())

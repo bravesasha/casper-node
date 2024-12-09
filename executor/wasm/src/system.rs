@@ -214,7 +214,7 @@ mod tests {
         AddressGenerator,
     };
     use casper_types::{
-        ChainspecRegistry, Digest, GenesisConfigBuilder, Phase, ProtocolVersion, TransactionHash,
+        ChainspecRegistry, Digest, GenesisConfig, Phase, ProtocolVersion, TransactionHash,
         TransactionV1Hash, U512,
     };
     use parking_lot::RwLock;
@@ -226,7 +226,7 @@ mod tests {
         let (global_state, mut root_hash, _tempdir) =
             global_state::state::lmdb::make_temporary_global_state([]);
 
-        let genesis_config = GenesisConfigBuilder::default().build();
+        let genesis_config = GenesisConfig::default();
 
         let genesis_request: GenesisRequest = GenesisRequest::new(
             Digest::hash("foo"),

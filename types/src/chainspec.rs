@@ -52,7 +52,7 @@ pub use core_config::{
 };
 pub use fee_handling::FeeHandling;
 #[cfg(any(feature = "std", test))]
-pub use genesis_config::{GenesisConfig, GenesisConfigBuilder};
+pub use genesis_config::GenesisConfig;
 pub use global_state_update::{GlobalStateUpdate, GlobalStateUpdateConfig, GlobalStateUpdateError};
 pub use highway_config::HighwayConfig;
 pub use hold_balance_handling::HoldBalanceHandling;

@@ -1,5 +1,3 @@
-#[cfg(any(feature = "std", test))]
-mod deploy_builder;
 pub mod deploy_category;
 mod deploy_hash;
 mod deploy_header;
@@ -65,8 +63,6 @@ use crate::{
 use crate::{chainspec::PricingHandling, Chainspec, LARGE_WASM_LANE_ID};
 #[cfg(any(feature = "std", test))]
 use crate::{system::auction::ARG_AMOUNT, transaction::GasLimited, Gas, Motes, U512};
-#[cfg(any(feature = "std", test))]
-pub use deploy_builder::{DeployBuilder, DeployBuilderError};
 pub use deploy_hash::DeployHash;
 pub use deploy_header::DeployHeader;
 pub use deploy_id::DeployId;
@@ -122,8 +118,6 @@ static DEPLOY: Lazy<Deploy> = Lazy::new(|| {
 });
 
 /// A signed smart contract.
-///
-/// To construct a new `Deploy`, use a [`DeployBuilder`].
 #[derive(Clone, Eq, Debug)]
 #[cfg_attr(
     any(feature = "std", test),
@@ -203,7 +197,6 @@ impl Deploy {
         )
     }
 
-    /// Called by the `DeployBuilder` to construct a new `Deploy`.
     #[cfg(any(feature = "std", test))]
     #[allow(clippy::too_many_arguments)]
     fn build(

@@ -20,9 +20,9 @@ use casper_storage::{
     AddressGenerator,
 };
 use casper_types::{
-    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount,
-    GenesisConfigBuilder, Key, Motes, Phase, ProtocolVersion, PublicKey, SecretKey, StoredValue,
-    Timestamp, TransactionHash, TransactionV1Hash, U512,
+    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig, Key,
+    Motes, Phase, ProtocolVersion, PublicKey, SecretKey, StoredValue, Timestamp, TransactionHash,
+    TransactionV1Hash, U512,
 };
 use fs_extra::dir;
 use once_cell::sync::Lazy;
@@ -263,9 +263,8 @@ fn make_global_state_with_genesis() -> (LmdbGlobalState, Digest, TempDir) {
     let (global_state, _state_root_hash, _tempdir) =
         global_state::state::lmdb::make_temporary_global_state([]);
 
-    let genesis_config = GenesisConfigBuilder::default()
-        .with_accounts(default_accounts)
-        .build();
+    let mut genesis_config = GenesisConfig::default();
+    genesis_config.accounts(default_accounts);
     let genesis_request: GenesisRequest = GenesisRequest::new(
         Digest::hash("foo"),
         ProtocolVersion::V2_0_0,

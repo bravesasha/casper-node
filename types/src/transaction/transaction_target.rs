@@ -21,115 +21,10 @@ use rand::{Rng, RngCore};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(
-    feature = "json-schema",
-    derive(JsonSchema),
-    schemars(description = "Stored params of a TransactionTarget.")
-)]
-#[serde(deny_unknown_fields)]
-pub enum TransactionStoredRuntimeParams {
-    VmCasperV1,
-    VmCasperV2 { transferred_value: u64 },
-}
-
-impl TransactionStoredRuntimeParams {
-    /// Returns the contract runtime tag.
-    pub fn contract_runtime_tag(&self) -> ContractRuntimeTag {
-        match self {
-            TransactionStoredRuntimeParams::VmCasperV1 => ContractRuntimeTag::VmCasperV1,
-            TransactionStoredRuntimeParams::VmCasperV2 { .. } => ContractRuntimeTag::VmCasperV2,
-        }
-    }
-}
-
 const VM_CASPER_V1_TAG: u8 = 0;
 const VM_CASPER_V2_TAG: u8 = 1;
 const TRANSFERRED_VALUE_INDEX: u16 = 1;
 const SEED_VALUE_INDEX: u16 = 2;
-
-impl ToBytes for TransactionStoredRuntimeParams {
-    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        match self {
-            TransactionStoredRuntimeParams::VmCasperV1 => {
-                CalltableSerializationEnvelopeBuilder::new(vec![
-                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                ])?
-                .add_field(TAG_FIELD_INDEX, &VM_CASPER_V1_TAG)?
-                .binary_payload_bytes()
-            }
-            TransactionStoredRuntimeParams::VmCasperV2 { transferred_value } => {
-                CalltableSerializationEnvelopeBuilder::new(vec![
-                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                    crate::bytesrepr::U64_SERIALIZED_LENGTH,
-                ])?
-                .add_field(TAG_FIELD_INDEX, &VM_CASPER_V2_TAG)?
-                .add_field(TRANSFERRED_VALUE_INDEX, transferred_value)?
-                .binary_payload_bytes()
-            }
-        }
-    }
-
-    fn serialized_length(&self) -> usize {
-        match self {
-            TransactionStoredRuntimeParams::VmCasperV1 => {
-                CalltableSerializationEnvelope::estimate_size(vec![
-                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                ])
-            }
-            TransactionStoredRuntimeParams::VmCasperV2 { .. } => {
-                CalltableSerializationEnvelope::estimate_size(vec![
-                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                    crate::bytesrepr::U64_SERIALIZED_LENGTH,
-                ])
-            }
-        }
-    }
-}
-
-impl FromBytes for TransactionStoredRuntimeParams {
-    fn from_bytes(bytes: &[u8]) -> Result<(TransactionStoredRuntimeParams, &[u8]), Error> {
-        let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(3, bytes)?;
-        let window = binary_payload.start_consuming()?.ok_or(Formatting)?;
-        window.verify_index(TAG_FIELD_INDEX)?;
-        let (tag, window) = window.deserialize_and_maybe_next::<u8>()?;
-        let to_ret = match tag {
-            VM_CASPER_V1_TAG => {
-                if window.is_some() {
-                    return Err(Formatting);
-                }
-                Ok(TransactionStoredRuntimeParams::VmCasperV1)
-            }
-            VM_CASPER_V2_TAG => {
-                let window = window.ok_or(Formatting)?;
-                window.verify_index(TRANSFERRED_VALUE_INDEX)?;
-                let (transferred_value, window) = window.deserialize_and_maybe_next::<u64>()?;
-                if window.is_some() {
-                    return Err(Formatting);
-                }
-                Ok(TransactionStoredRuntimeParams::VmCasperV2 { transferred_value })
-            }
-            _ => Err(Formatting),
-        };
-        to_ret.map(|endpoint| (endpoint, remainder))
-    }
-}
-
-impl Display for TransactionStoredRuntimeParams {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        match self {
-            TransactionStoredRuntimeParams::VmCasperV1 => write!(formatter, "vm-casper-v1"),
-            TransactionStoredRuntimeParams::VmCasperV2 { transferred_value } => {
-                write!(
-                    formatter,
-                    "vm-casper-v2 {{ transferred_value: {} }}",
-                    transferred_value
-                )
-            }
-        }
-    }
-}
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
@@ -139,7 +34,7 @@ impl Display for TransactionStoredRuntimeParams {
     schemars(description = "Session params of a TransactionTarget.")
 )]
 #[serde(deny_unknown_fields)]
-pub enum TransactionSessionRuntimeParams {
+pub enum TransactionRuntimeParams {
     VmCasperV1,
     VmCasperV2 {
         /// The amount of motes to transfer before code is executed.
@@ -153,34 +48,34 @@ pub enum TransactionSessionRuntimeParams {
     },
 }
 
-impl TransactionSessionRuntimeParams {
+impl TransactionRuntimeParams {
     /// Returns the contract runtime tag.
     pub fn contract_runtime_tag(&self) -> ContractRuntimeTag {
         match self {
-            TransactionSessionRuntimeParams::VmCasperV1 => ContractRuntimeTag::VmCasperV1,
-            TransactionSessionRuntimeParams::VmCasperV2 { .. } => ContractRuntimeTag::VmCasperV2,
+            TransactionRuntimeParams::VmCasperV1 => ContractRuntimeTag::VmCasperV1,
+            TransactionRuntimeParams::VmCasperV2 { .. } => ContractRuntimeTag::VmCasperV2,
         }
     }
 
     pub fn seed(&self) -> Option<[u8; 32]> {
         match self {
-            TransactionSessionRuntimeParams::VmCasperV1 => None,
-            TransactionSessionRuntimeParams::VmCasperV2 { seed, .. } => *seed,
+            TransactionRuntimeParams::VmCasperV1 => None,
+            TransactionRuntimeParams::VmCasperV2 { seed, .. } => *seed,
         }
     }
 }
 
-impl ToBytes for TransactionSessionRuntimeParams {
+impl ToBytes for TransactionRuntimeParams {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         match self {
-            TransactionSessionRuntimeParams::VmCasperV1 => {
+            TransactionRuntimeParams::VmCasperV1 => {
                 CalltableSerializationEnvelopeBuilder::new(vec![
                     crate::bytesrepr::U8_SERIALIZED_LENGTH,
                 ])?
                 .add_field(TAG_FIELD_INDEX, &VM_CASPER_V1_TAG)?
                 .binary_payload_bytes()
             }
-            TransactionSessionRuntimeParams::VmCasperV2 {
+            TransactionRuntimeParams::VmCasperV2 {
                 transferred_value,
                 seed,
             } => CalltableSerializationEnvelopeBuilder::new(vec![
@@ -197,12 +92,12 @@ impl ToBytes for TransactionSessionRuntimeParams {
 
     fn serialized_length(&self) -> usize {
         match self {
-            TransactionSessionRuntimeParams::VmCasperV1 => {
+            TransactionRuntimeParams::VmCasperV1 => {
                 CalltableSerializationEnvelope::estimate_size(vec![
                     crate::bytesrepr::U8_SERIALIZED_LENGTH,
                 ])
             }
-            TransactionSessionRuntimeParams::VmCasperV2 {
+            TransactionRuntimeParams::VmCasperV2 {
                 transferred_value,
                 seed,
             } => CalltableSerializationEnvelope::estimate_size(vec![
@@ -214,8 +109,8 @@ impl ToBytes for TransactionSessionRuntimeParams {
     }
 }
 
-impl FromBytes for TransactionSessionRuntimeParams {
-    fn from_bytes(bytes: &[u8]) -> Result<(TransactionSessionRuntimeParams, &[u8]), Error> {
+impl FromBytes for TransactionRuntimeParams {
+    fn from_bytes(bytes: &[u8]) -> Result<(TransactionRuntimeParams, &[u8]), Error> {
         let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(4, bytes)?;
         let window = binary_payload.start_consuming()?.ok_or(Formatting)?;
         window.verify_index(TAG_FIELD_INDEX)?;
@@ -225,7 +120,7 @@ impl FromBytes for TransactionSessionRuntimeParams {
                 if window.is_some() {
                     return Err(Formatting);
                 }
-                Ok(TransactionSessionRuntimeParams::VmCasperV1)
+                Ok(TransactionRuntimeParams::VmCasperV1)
             }
             VM_CASPER_V2_TAG => {
                 let window = window.ok_or(Formatting)?;
@@ -237,7 +132,7 @@ impl FromBytes for TransactionSessionRuntimeParams {
                 if window.is_some() {
                     return Err(Formatting);
                 }
-                Ok(TransactionSessionRuntimeParams::VmCasperV2 {
+                Ok(TransactionRuntimeParams::VmCasperV2 {
                     transferred_value,
                     seed,
                 })
@@ -248,11 +143,11 @@ impl FromBytes for TransactionSessionRuntimeParams {
     }
 }
 
-impl Display for TransactionSessionRuntimeParams {
+impl Display for TransactionRuntimeParams {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         match self {
-            TransactionSessionRuntimeParams::VmCasperV1 => write!(formatter, "vm-casper-v1"),
-            TransactionSessionRuntimeParams::VmCasperV2 {
+            TransactionRuntimeParams::VmCasperV1 => write!(formatter, "vm-casper-v1"),
+            TransactionRuntimeParams::VmCasperV2 {
                 transferred_value,
                 seed,
             } => write!(
@@ -281,7 +176,7 @@ pub enum TransactionTarget {
         /// The identifier of the stored execution target.
         id: TransactionInvocationTarget,
         /// The execution runtime to use.
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     },
     /// The execution target is the included module bytes, i.e. compiled Wasm.
     Session {
@@ -290,7 +185,7 @@ pub enum TransactionTarget {
         /// The compiled Wasm.
         module_bytes: Bytes,
         /// The execution runtime to use.
-        runtime: TransactionSessionRuntimeParams,
+        runtime: TransactionRuntimeParams,
     },
 }
 
@@ -351,7 +246,7 @@ impl TransactionTarget {
             0 => TransactionTarget::Native,
             1 => TransactionTarget::Stored {
                 id: TransactionInvocationTarget::random(rng),
-                runtime: TransactionStoredRuntimeParams::VmCasperV1,
+                runtime: TransactionRuntimeParams::VmCasperV1,
             },
             2 => {
                 let mut buffer = vec![0u8; rng.gen_range(0..100)];
@@ -360,7 +255,7 @@ impl TransactionTarget {
                 TransactionTarget::Session {
                     is_install_upgrade,
                     module_bytes: Bytes::from(buffer),
-                    runtime: TransactionSessionRuntimeParams::VmCasperV1,
+                    runtime: TransactionRuntimeParams::VmCasperV1,
                 }
             }
             _ => unreachable!(),
@@ -443,7 +338,7 @@ impl FromBytes for TransactionTarget {
                 let window = window.ok_or(Formatting)?;
                 window.verify_index(STORED_RUNTIME_INDEX)?;
                 let (runtime, window) =
-                    window.deserialize_and_maybe_next::<TransactionStoredRuntimeParams>()?;
+                    window.deserialize_and_maybe_next::<TransactionRuntimeParams>()?;
                 if window.is_some() {
                     return Err(Formatting);
                 }
@@ -456,7 +351,7 @@ impl FromBytes for TransactionTarget {
                 let window = window.ok_or(Formatting)?;
                 window.verify_index(SESSION_RUNTIME_INDEX)?;
                 let (runtime, window) =
-                    window.deserialize_and_maybe_next::<TransactionSessionRuntimeParams>()?;
+                    window.deserialize_and_maybe_next::<TransactionRuntimeParams>()?;
                 let window = window.ok_or(Formatting)?;
                 window.verify_index(SESSION_MODULE_BYTES_INDEX)?;
                 let (module_bytes, window) = window.deserialize_and_maybe_next::<Bytes>()?;

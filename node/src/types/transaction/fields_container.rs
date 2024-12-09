@@ -1,37 +1,29 @@
-#[cfg(any(feature = "testing", test))]
-use crate::testing::TestRng;
-#[cfg(any(feature = "std", feature = "testing", test))]
-use crate::{
+#[cfg(test)]
+use super::arg_handling;
+use casper_types::{
     bytesrepr::{Bytes, ToBytes},
-    transaction::transaction_v1::*,
-    TransactionEntryPoint, TransactionScheduling, TransactionTarget,
+    TransactionArgs, TransactionEntryPoint, TransactionScheduling, TransactionTarget,
 };
-#[cfg(any(feature = "testing", test))]
-use crate::{
-    PublicKey, RuntimeArgs, TransactionInvocationTarget, TransferTarget, AUCTION_LANE_ID,
-    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
+#[cfg(test)]
+use casper_types::{
+    testing::TestRng, PublicKey, RuntimeArgs, TransactionInvocationTarget,
+    TransactionRuntimeParams, TransferTarget, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID,
+    MINT_LANE_ID,
 };
-#[cfg(any(feature = "std", feature = "testing", test))]
-use alloc::collections::BTreeMap;
-#[cfg(any(feature = "testing", test))]
+#[cfg(test)]
 use rand::{Rng, RngCore};
+use std::collections::BTreeMap;
 
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) const ARGS_MAP_KEY: u16 = 0;
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) const TARGET_MAP_KEY: u16 = 1;
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) const ENTRY_POINT_MAP_KEY: u16 = 2;
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) const SCHEDULING_MAP_KEY: u16 = 3;
 
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum FieldsContainerError {
     CouldNotSerializeField { field_index: u16 },
 }
 
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) struct FieldsContainer {
     pub(super) args: TransactionArgs,
     pub(super) target: TransactionTarget,
@@ -39,7 +31,6 @@ pub(crate) struct FieldsContainer {
     pub(super) scheduling: TransactionScheduling,
 }
 
-#[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 impl FieldsContainer {
     pub(crate) fn new(
         args: TransactionArgs,
@@ -93,7 +84,7 @@ impl FieldsContainer {
     }
 
     /// Returns a random `FieldsContainer`.
-    #[cfg(any(feature = "testing", test))]
+    #[cfg(test)]
     pub(crate) fn random(rng: &mut TestRng) -> Self {
         match rng.gen_range(0..8) {
             0 => {
@@ -194,7 +185,7 @@ impl FieldsContainer {
                 let target = TransactionTarget::Session {
                     is_install_upgrade,
                     module_bytes: Bytes::from(buffer),
-                    runtime: crate::TransactionRuntimeParams::VmCasperV1,
+                    runtime: TransactionRuntimeParams::VmCasperV1,
                 };
                 FieldsContainer::new(
                     TransactionArgs::Named(RuntimeArgs::random(rng)),
@@ -208,7 +199,7 @@ impl FieldsContainer {
     }
 
     /// Returns a random `FieldsContainer`.
-    #[cfg(any(feature = "testing", test))]
+    #[cfg(test)]
     pub fn random_of_lane(rng: &mut TestRng, lane_id: u8) -> Self {
         match lane_id {
             MINT_LANE_ID => Self::random_transfer(rng),
@@ -218,26 +209,11 @@ impl FieldsContainer {
         }
     }
 
-    #[cfg(any(feature = "testing", test))]
-    fn random_transfer(rng: &mut TestRng) -> Self {
-        let amount = rng.gen_range(2_500_000_000..=u64::MAX);
-        let maybe_source = if rng.gen() { Some(rng.gen()) } else { None };
-        let target = TransferTarget::random(rng);
-        let maybe_id = rng.gen::<bool>().then(|| rng.gen());
-        let args = arg_handling::new_transfer_args(amount, maybe_source, target, maybe_id).unwrap();
-        FieldsContainer::new(
-            TransactionArgs::Named(args),
-            TransactionTarget::Native,
-            TransactionEntryPoint::Transfer,
-            TransactionScheduling::random(rng),
-        )
-    }
-
-    #[cfg(any(feature = "testing", test))]
+    #[cfg(test)]
     fn random_install_upgrade(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Session {
             module_bytes: Bytes::from(rng.random_vec(0..100)),
-            runtime: crate::TransactionRuntimeParams::VmCasperV1,
+            runtime: TransactionRuntimeParams::VmCasperV1,
             is_install_upgrade: true,
         };
         FieldsContainer::new(
@@ -248,7 +224,7 @@ impl FieldsContainer {
         )
     }
 
-    #[cfg(any(feature = "testing", test))]
+    #[cfg(test)]
     fn random_staking(rng: &mut TestRng) -> Self {
         let public_key = PublicKey::random(rng);
         let delegation_rate = rng.gen();
@@ -274,11 +250,26 @@ impl FieldsContainer {
         )
     }
 
-    #[cfg(any(feature = "testing", test))]
+    #[cfg(test)]
+    fn random_transfer(rng: &mut TestRng) -> Self {
+        let amount = rng.gen_range(2_500_000_000..=u64::MAX);
+        let maybe_source = if rng.gen() { Some(rng.gen()) } else { None };
+        let target = TransferTarget::random(rng);
+        let maybe_id = rng.gen::<bool>().then(|| rng.gen());
+        let args = arg_handling::new_transfer_args(amount, maybe_source, target, maybe_id).unwrap();
+        FieldsContainer::new(
+            TransactionArgs::Named(args),
+            TransactionTarget::Native,
+            TransactionEntryPoint::Transfer,
+            TransactionScheduling::random(rng),
+        )
+    }
+
+    #[cfg(test)]
     fn random_standard(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Stored {
             id: TransactionInvocationTarget::random(rng),
-            runtime: crate::transaction::transaction_target::TransactionRuntimeParams::VmCasperV1,
+            runtime: TransactionRuntimeParams::VmCasperV1,
         };
         FieldsContainer::new(
             TransactionArgs::Named(RuntimeArgs::random(rng)),

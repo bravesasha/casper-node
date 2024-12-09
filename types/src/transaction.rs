@@ -67,8 +67,6 @@ pub use deploy::{
     Deploy, DeployDecodeFromJsonError, DeployError, DeployExcessiveSizeError, DeployHash,
     DeployHeader, DeployId, ExecutableDeployItem, ExecutableDeployItemIdentifier, InvalidDeploy,
 };
-#[cfg(any(feature = "std", test))]
-pub use deploy::{DeployBuilder, DeployBuilderError};
 pub use error::InvalidTransaction;
 pub use execution_info::ExecutionInfo;
 pub use initiator_addr::InitiatorAddr;
@@ -82,18 +80,15 @@ pub use transaction_hash::TransactionHash;
 pub use transaction_id::TransactionId;
 pub use transaction_invocation_target::TransactionInvocationTarget;
 pub use transaction_scheduling::TransactionScheduling;
-pub use transaction_target::{
-    TransactionSessionRuntimeParams, TransactionStoredRuntimeParams, TransactionTarget,
-};
+pub use transaction_target::{TransactionRuntimeParams, TransactionTarget};
+#[cfg(feature = "json-schema")]
+pub(crate) use transaction_v1::arg_handling;
 #[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) use transaction_v1::fields_container::FieldsContainer;
 pub use transaction_v1::{
-    arg_handling, InvalidTransactionV1, TransactionArgs, TransactionV1,
-    TransactionV1DecodeFromJsonError, TransactionV1Error, TransactionV1ExcessiveSizeError,
-    TransactionV1Hash, TransactionV1Payload,
+    InvalidTransactionV1, TransactionArgs, TransactionV1, TransactionV1DecodeFromJsonError,
+    TransactionV1Error, TransactionV1ExcessiveSizeError, TransactionV1Hash, TransactionV1Payload,
 };
-#[cfg(any(feature = "std", test))]
-pub use transaction_v1::{TransactionV1Builder, TransactionV1BuilderError};
 pub use transfer_target::TransferTarget;
 
 const DEPLOY_TAG: u8 = 0;
@@ -111,15 +106,27 @@ pub(super) static TRANSACTION: Lazy<Transaction> = Lazy::new(|| {
     )
     .unwrap();
     let id = Some(999);
-
-    let v1_txn = TransactionV1Builder::new_transfer(30_000_000_000_u64, Some(source), target, id)
-        .unwrap()
-        .with_chain_name("casper-example")
-        .with_timestamp(*Timestamp::example())
-        .with_ttl(TimeDiff::from_seconds(3_600))
-        .with_secret_key(secret_key)
-        .build()
-        .unwrap();
+    let amount = 30_000_000_000_u64;
+    let args = arg_handling::new_transfer_args(amount, Some(source), target, id).unwrap();
+    let container = FieldsContainer::new(
+        TransactionArgs::Named(args),
+        TransactionTarget::Native,
+        TransactionEntryPoint::Transfer,
+        TransactionScheduling::Standard,
+    );
+    let pricing_mode = PricingMode::Fixed {
+        gas_price_tolerance: 5,
+        additional_computation_factor: 0,
+    };
+    let initiator_addr_and_secret_key = InitiatorAddrAndSecretKey::SecretKey(secret_key);
+    let v1_txn = TransactionV1::build(
+        "casper-example".to_string(),
+        *Timestamp::example(),
+        TimeDiff::from_seconds(3_600),
+        pricing_mode,
+        container.to_map().unwrap(),
+        initiator_addr_and_secret_key,
+    );
     Transaction::V1(v1_txn)
 });
 

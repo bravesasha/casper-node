@@ -5,7 +5,7 @@ use rand::{seq::SliceRandom, Rng};
 
 use casper_types::{
     testing::TestRng, Deploy, EraId, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
-    TransactionConfig, TransactionLimitsDefinition, TransactionV1, TransactionV1Config,
+    TransactionConfig, TransactionLimitsDefinition, TransactionV1Config,
     DEFAULT_LARGE_TRANSACTION_GAS_LIMIT, LARGE_WASM_LANE_ID,
 };
 
@@ -13,7 +13,7 @@ use super::*;
 use crate::{
     effect::announcements::TransactionBufferAnnouncement::{self, TransactionsExpired},
     reactor::{EventQueueHandle, QueueKind, Scheduler},
-    types::FinalizedBlock,
+    types::{transaction::transaction_v1_builder::TransactionV1Builder, FinalizedBlock},
     utils,
 };
 
@@ -69,11 +69,16 @@ fn create_valid_transaction(
     match transaction_lane {
         transaction_lane if transaction_lane == MINT_LANE_ID => {
             if rng.gen() {
-                Transaction::V1(TransactionV1::random_transfer(
-                    rng,
-                    strict_timestamp,
-                    with_ttl,
-                ))
+                let transaction_v1 =
+                    TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+                        rng,
+                        MINT_LANE_ID,
+                        strict_timestamp,
+                        with_ttl,
+                    )
+                    .build()
+                    .unwrap();
+                Transaction::V1(transaction_v1)
             } else {
                 Transaction::Deploy(Deploy::random_valid_native_transfer_with_timestamp_and_ttl(
                     rng,
@@ -83,10 +88,24 @@ fn create_valid_transaction(
             }
         }
         transaction_lane if transaction_lane == INSTALL_UPGRADE_LANE_ID => Transaction::V1(
-            TransactionV1::random_install_upgrade(rng, strict_timestamp, with_ttl),
+            TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+                rng,
+                INSTALL_UPGRADE_LANE_ID,
+                strict_timestamp,
+                with_ttl,
+            )
+            .build()
+            .unwrap(),
         ),
         transaction_lane if transaction_lane == AUCTION_LANE_ID => Transaction::V1(
-            TransactionV1::random_auction(rng, strict_timestamp, with_ttl),
+            TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+                rng,
+                AUCTION_LANE_ID,
+                strict_timestamp,
+                with_ttl,
+            )
+            .build()
+            .unwrap(),
         ),
         _ => {
             if rng.gen() {
@@ -97,7 +116,16 @@ fn create_valid_transaction(
                     _ => Deploy::random_with_valid_session_package_by_name(rng),
                 })
             } else {
-                Transaction::V1(TransactionV1::random_wasm(rng, strict_timestamp, with_ttl))
+                Transaction::V1(
+                    TransactionV1Builder::new_random_with_category_and_timestamp_and_ttl(
+                        rng,
+                        LARGE_WASM_LANE_ID,
+                        strict_timestamp,
+                        with_ttl,
+                    )
+                    .build()
+                    .unwrap(),
+                )
             }
         }
     }
@@ -735,7 +763,7 @@ fn generate_and_register_transactions(
         .map(|_| create_valid_transaction(rng, INSTALL_UPGRADE_LANE_ID, None, None))
         .collect();
     let standards: Vec<_> = (0..standard_count)
-        .map(|_| create_valid_transaction(rng, 3, None, None))
+        .map(|_| create_valid_transaction(rng, LARGE_WASM_LANE_ID, None, None))
         .collect();
     transfers
         .iter()
