@@ -36,9 +36,9 @@ use casper_types::{
     global_state::TrieMerkleProof,
     testing::TestRng,
     Block, BlockV2, CLValue, Chainspec, ChainspecRawBytes, Contract, Deploy, EraId, HashAddr,
-    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Package, PricingMode, ProtocolVersion,
-    PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp, Transaction,
-    TransactionConfig, TransactionRuntime, TransactionV1, URef, U512,
+    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Package, PricingHandling, PricingMode,
+    ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp,
+    Transaction, TransactionConfig, TransactionRuntime, TransactionV1, URef, U512,
 };
 
 use super::*;
@@ -595,10 +595,9 @@ impl TestScenario {
             }
             TestScenario::InvalidPricingModeForTransactionV1 => {
                 let classic_mode_transaction = TransactionV1Builder::new_random(rng)
-                    .with_pricing_mode(PricingMode::PaymentLimited {
-                        payment_amount: 10000u64,
-                        gas_price_tolerance: 1u8,
-                        standard_payment: true,
+                    .with_pricing_mode(PricingMode::Fixed {
+                        gas_price_tolerance: 5,
+                        additional_computation_factor: 0,
                     })
                     .with_chain_name("casper-example")
                     .build()
@@ -1152,6 +1151,14 @@ async fn run_transaction_acceptor_without_timeout(
     let admin = SecretKey::random(rng);
     let (mut chainspec, chainspec_raw_bytes) =
         <(Chainspec, ChainspecRawBytes)>::from_resources("local");
+    let mut chainspec = if let TestScenario::TooLowGasPriceToleranceForTransactionV1 = test_scenario
+    {
+        chainspec.with_pricing_handling(PricingHandling::Fixed);
+        chainspec
+    } else {
+        chainspec
+    };
+
     chainspec.core_config.administrators = iter::once(PublicKey::from(&admin)).collect();
 
     let chainspec = Arc::new(chainspec);
