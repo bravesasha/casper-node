@@ -38,8 +38,7 @@ use casper_types::{
     Block, BlockV2, CLValue, Chainspec, ChainspecRawBytes, Contract, Deploy, EraId, HashAddr,
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Package, PricingMode, ProtocolVersion,
     PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp, Transaction,
-    TransactionConfig, TransactionSessionRuntimeParams, TransactionStoredRuntimeParams,
-    TransactionV1, TransactionV1Builder, URef, U512,
+    TransactionConfig, TransactionRuntimeParams, TransactionV1, TransactionV1Builder, URef, U512,
 };
 
 use super::*;
@@ -289,7 +288,7 @@ impl TestScenario {
                 let txn = TransactionV1Builder::new_session(
                     false,
                     Bytes::from(vec![1]),
-                    TransactionSessionRuntimeParams::VmCasperV1,
+                    TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_chain_name("casper-example")
                 .with_timestamp(Timestamp::zero())
@@ -314,7 +313,7 @@ impl TestScenario {
                     let txn = TransactionV1Builder::new_session(
                         false,
                         Bytes::from(vec![1]),
-                        TransactionSessionRuntimeParams::VmCasperV1,
+                        TransactionRuntimeParams::VmCasperV1,
                     )
                     .with_chain_name("casper-example")
                     .with_timestamp(Timestamp::now())
@@ -333,7 +332,7 @@ impl TestScenario {
                 let txn = TransactionV1Builder::new_session(
                     false,
                     Bytes::from(vec![1]),
-                    TransactionSessionRuntimeParams::VmCasperV1,
+                    TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_chain_name("casper-example")
                 .with_timestamp(Timestamp::now())
@@ -414,7 +413,7 @@ impl TestScenario {
                         let txn = TransactionV1Builder::new_targeting_invocable_entity_via_alias(
                             "Test",
                             "call",
-                            TransactionStoredRuntimeParams::VmCasperV1,
+                            TransactionRuntimeParams::VmCasperV1,
                         )
                         .with_chain_name("casper-example")
                         .with_timestamp(Timestamp::now())
@@ -427,7 +426,7 @@ impl TestScenario {
                         let txn = TransactionV1Builder::new_targeting_invocable_entity(
                             AddressableEntityHash::new(HashAddr::default()),
                             "call",
-                            TransactionStoredRuntimeParams::VmCasperV1,
+                            TransactionRuntimeParams::VmCasperV1,
                         )
                         .with_chain_name("casper-example")
                         .with_timestamp(Timestamp::now())
@@ -440,7 +439,7 @@ impl TestScenario {
                         let txn = TransactionV1Builder::new_targeting_invocable_entity(
                             AddressableEntityHash::new(HashAddr::default()),
                             "non-existent-entry-point",
-                            TransactionStoredRuntimeParams::VmCasperV1,
+                            TransactionRuntimeParams::VmCasperV1,
                         )
                         .with_chain_name("casper-example")
                         .with_timestamp(Timestamp::now())
@@ -482,7 +481,7 @@ impl TestScenario {
                         "Test",
                         None,
                         "call",
-                        TransactionStoredRuntimeParams::VmCasperV1,
+                        TransactionRuntimeParams::VmCasperV1,
                     )
                     .with_chain_name("casper-example")
                     .with_timestamp(Timestamp::now())
@@ -496,7 +495,7 @@ impl TestScenario {
                         PackageHash::new(PackageAddr::default()),
                         None,
                         "call",
-                        TransactionStoredRuntimeParams::VmCasperV1,
+                        TransactionRuntimeParams::VmCasperV1,
                     )
                     .with_chain_name("casper-example")
                     .with_timestamp(Timestamp::now())
@@ -510,7 +509,7 @@ impl TestScenario {
                         PackageHash::new(PackageAddr::default()),
                         Some(6),
                         "call",
-                        TransactionStoredRuntimeParams::VmCasperV1,
+                        TransactionRuntimeParams::VmCasperV1,
                     )
                     .with_chain_name("casper-example")
                     .with_timestamp(Timestamp::now())
@@ -539,7 +538,7 @@ impl TestScenario {
                         let txn = TransactionV1Builder::new_session(
                             false,
                             Bytes::from(vec![1]),
-                            TransactionSessionRuntimeParams::VmCasperV1,
+                            TransactionRuntimeParams::VmCasperV1,
                         )
                         .with_chain_name("casper-example")
                         .with_timestamp(timestamp)
@@ -566,7 +565,7 @@ impl TestScenario {
                         let txn = TransactionV1Builder::new_session(
                             false,
                             Bytes::from(vec![1]),
-                            TransactionSessionRuntimeParams::VmCasperV1,
+                            TransactionRuntimeParams::VmCasperV1,
                         )
                         .with_chain_name("casper-example")
                         .with_timestamp(timestamp)
@@ -615,7 +614,7 @@ impl TestScenario {
                 let txn = TransactionV1Builder::new_session(
                     false,
                     Bytes::from(vec![1]),
-                    TransactionSessionRuntimeParams::VmCasperV1,
+                    TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_chain_name("casper-example")
                 .with_ttl(TimeDiff::from_seconds(300))

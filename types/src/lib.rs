@@ -197,9 +197,9 @@ pub use transaction::{
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, NamedArg, PackageIdentifier,
     PricingMode, PricingModeError, RuntimeArgs, Transaction, TransactionArgs,
     TransactionEntryPoint, TransactionHash, TransactionId, TransactionInvocationTarget,
-    TransactionScheduling, TransactionSessionRuntimeParams, TransactionStoredRuntimeParams,
-    TransactionTarget, TransactionV1, TransactionV1DecodeFromJsonError, TransactionV1Error,
-    TransactionV1ExcessiveSizeError, TransactionV1Hash, TransactionV1Payload, TransferTarget,
+    TransactionRuntimeParams, TransactionScheduling, TransactionTarget, TransactionV1,
+    TransactionV1DecodeFromJsonError, TransactionV1Error, TransactionV1ExcessiveSizeError,
+    TransactionV1Hash, TransactionV1Payload, TransferTarget,
 };
 #[cfg(any(feature = "std", test))]
 pub use transaction::{

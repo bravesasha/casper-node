@@ -194,7 +194,7 @@ impl FieldsContainer {
                 let target = TransactionTarget::Session {
                     is_install_upgrade,
                     module_bytes: Bytes::from(buffer),
-                    runtime: crate::TransactionSessionRuntimeParams::VmCasperV1,
+                    runtime: crate::TransactionRuntimeParams::VmCasperV1,
                 };
                 FieldsContainer::new(
                     TransactionArgs::Named(RuntimeArgs::random(rng)),
@@ -237,7 +237,7 @@ impl FieldsContainer {
     fn random_install_upgrade(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Session {
             module_bytes: Bytes::from(rng.random_vec(0..100)),
-            runtime: crate::TransactionSessionRuntimeParams::VmCasperV1,
+            runtime: crate::TransactionRuntimeParams::VmCasperV1,
             is_install_upgrade: true,
         };
         FieldsContainer::new(
@@ -278,8 +278,7 @@ impl FieldsContainer {
     fn random_standard(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Stored {
             id: TransactionInvocationTarget::random(rng),
-            runtime:
-                crate::transaction::transaction_target::TransactionStoredRuntimeParams::VmCasperV1,
+            runtime: crate::transaction::transaction_target::TransactionRuntimeParams::VmCasperV1,
         };
         FieldsContainer::new(
             TransactionArgs::Named(RuntimeArgs::random(rng)),

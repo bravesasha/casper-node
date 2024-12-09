@@ -82,9 +82,7 @@ pub use transaction_hash::TransactionHash;
 pub use transaction_id::TransactionId;
 pub use transaction_invocation_target::TransactionInvocationTarget;
 pub use transaction_scheduling::TransactionScheduling;
-pub use transaction_target::{
-    TransactionSessionRuntimeParams, TransactionStoredRuntimeParams, TransactionTarget,
-};
+pub use transaction_target::{TransactionRuntimeParams, TransactionTarget};
 #[cfg(any(feature = "std", feature = "testing", feature = "gens", test))]
 pub(crate) use transaction_v1::fields_container::FieldsContainer;
 pub use transaction_v1::{

@@ -12,10 +12,7 @@ use super::{
 use crate::{
     bytesrepr::Bytes,
     system::auction::Reservation,
-    transaction::{
-        transaction_target::{TransactionSessionRuntimeParams, TransactionStoredRuntimeParams},
-        FieldsContainer,
-    },
+    transaction::{transaction_target::TransactionRuntimeParams, FieldsContainer},
     AddressableEntityHash, CLValue, CLValueError, EntityVersion, PackageHash, PublicKey,
     RuntimeArgs, SecretKey, TimeDiff, Timestamp, TransactionEntryPoint,
     TransactionInvocationTarget, TransferTarget, URef, U512,
@@ -343,7 +340,7 @@ impl<'a> TransactionV1Builder<'a> {
     fn new_targeting_stored<E: Into<String>>(
         id: TransactionInvocationTarget,
         entry_point: E,
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let target = TransactionTarget::Stored { id, runtime };
         let mut builder = TransactionV1Builder::new();
@@ -359,7 +356,7 @@ impl<'a> TransactionV1Builder<'a> {
     pub fn new_targeting_invocable_entity<E: Into<String>>(
         hash: AddressableEntityHash,
         entry_point: E,
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let id = TransactionInvocationTarget::new_invocable_entity(hash);
         Self::new_targeting_stored(id, entry_point, runtime)
@@ -370,7 +367,7 @@ impl<'a> TransactionV1Builder<'a> {
     pub fn new_targeting_invocable_entity_via_alias<A: Into<String>, E: Into<String>>(
         alias: A,
         entry_point: E,
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let id = TransactionInvocationTarget::new_invocable_entity_alias(alias.into());
         Self::new_targeting_stored(id, entry_point, runtime)
@@ -382,7 +379,7 @@ impl<'a> TransactionV1Builder<'a> {
         hash: PackageHash,
         version: Option<EntityVersion>,
         entry_point: E,
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let id = TransactionInvocationTarget::new_package(hash, version);
         Self::new_targeting_stored(id, entry_point, runtime)
@@ -394,7 +391,7 @@ impl<'a> TransactionV1Builder<'a> {
         alias: A,
         version: Option<EntityVersion>,
         entry_point: E,
-        runtime: TransactionStoredRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let id = TransactionInvocationTarget::new_package_alias(alias.into(), version);
         Self::new_targeting_stored(id, entry_point, runtime)
@@ -405,7 +402,7 @@ impl<'a> TransactionV1Builder<'a> {
     pub fn new_session(
         is_install_upgrade: bool,
         module_bytes: Bytes,
-        runtime: TransactionSessionRuntimeParams,
+        runtime: TransactionRuntimeParams,
     ) -> Self {
         let target = TransactionTarget::Session {
             is_install_upgrade,

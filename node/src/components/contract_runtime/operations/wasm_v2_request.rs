@@ -21,7 +21,7 @@ use casper_storage::{
 };
 use casper_types::{
     execution::Effects, BlockHash, Digest, Gas, Key, TransactionEntryPoint,
-    TransactionInvocationTarget, TransactionSessionRuntimeParams, TransactionTarget, U512,
+    TransactionInvocationTarget, TransactionRuntimeParams, TransactionTarget, U512,
 };
 use thiserror::Error;
 use tracing::info;
@@ -166,7 +166,7 @@ impl WasmV2Request {
 
             TransactionTarget::Session {
                 module_bytes: _,
-                runtime: TransactionSessionRuntimeParams::VmCasperV1,
+                runtime: TransactionRuntimeParams::VmCasperV1,
                 is_install_upgrade: _, // TODO: Handle this
             } => {
                 return Err(InvalidRequest::ExpectedV2Runtime);
@@ -174,7 +174,7 @@ impl WasmV2Request {
             TransactionTarget::Session {
                 module_bytes,
                 runtime:
-                    TransactionSessionRuntimeParams::VmCasperV2 {
+                    TransactionRuntimeParams::VmCasperV2 {
                         transferred_value,
                         seed,
                     },

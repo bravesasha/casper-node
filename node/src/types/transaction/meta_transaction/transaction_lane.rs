@@ -5,7 +5,7 @@ use core::{
 
 use casper_types::{
     InvalidTransaction, InvalidTransactionV1, TransactionConfig, TransactionEntryPoint,
-    TransactionSessionRuntimeParams, TransactionTarget, TransactionV1Config, AUCTION_LANE_ID,
+    TransactionRuntimeParams, TransactionTarget, TransactionV1Config, AUCTION_LANE_ID,
     INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
 };
 use datasize::DataSize;
@@ -118,7 +118,7 @@ pub(crate) fn calculate_transaction_lane(
         },
         TransactionTarget::Session {
             is_install_upgrade,
-            runtime: TransactionSessionRuntimeParams::VmCasperV1,
+            runtime: TransactionRuntimeParams::VmCasperV1,
             ..
         } => match entry_point {
             TransactionEntryPoint::Call => {
@@ -150,7 +150,7 @@ pub(crate) fn calculate_transaction_lane(
         },
         TransactionTarget::Session {
             is_install_upgrade,
-            runtime: TransactionSessionRuntimeParams::VmCasperV2 { .. },
+            runtime: TransactionRuntimeParams::VmCasperV2 { .. },
             ..
         } => match entry_point {
             TransactionEntryPoint::Call | TransactionEntryPoint::Custom(_) => {

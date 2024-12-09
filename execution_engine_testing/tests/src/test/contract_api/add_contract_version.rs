@@ -9,7 +9,7 @@ use casper_execution_engine::{
 };
 use casper_types::{
     ApiError, BlockTime, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion, RuntimeArgs,
-    Transaction, TransactionArgs, TransactionEntryPoint, TransactionSessionRuntimeParams,
+    Transaction, TransactionArgs, TransactionEntryPoint, TransactionRuntimeParams,
     TransactionTarget, TransactionV1Builder,
 };
 
@@ -44,7 +44,7 @@ fn try_add_contract_version(
     let txn = TransactionV1Builder::new_session(
         is_install_upgrade,
         module_bytes,
-        TransactionSessionRuntimeParams::VmCasperV1,
+        TransactionRuntimeParams::VmCasperV1,
     )
     .with_secret_key(&DEFAULT_ACCOUNT_SECRET_KEY)
     .with_chain_name(CHAIN_NAME)

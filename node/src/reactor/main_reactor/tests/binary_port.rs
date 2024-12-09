@@ -1336,7 +1336,7 @@ fn try_accept_transaction(key: &SecretKey) -> TestCase {
         TransactionV1Builder::new_targeting_invocable_entity_via_alias(
             "Test",
             "call",
-            casper_types::TransactionStoredRuntimeParams::VmCasperV1,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_secret_key(key)
         .with_chain_name("casper-example")

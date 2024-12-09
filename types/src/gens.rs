@@ -47,7 +47,7 @@ use crate::{
     },
     transaction::{
         gens::deploy_hash_arb, FieldsContainer, InitiatorAddrAndSecretKey, TransactionArgs,
-        TransactionSessionRuntimeParams, TransactionStoredRuntimeParams, TransactionV1Payload,
+        TransactionRuntimeParams, TransactionV1Payload,
     },
     transfer::{
         gens::{transfer_v1_addr_arb, transfer_v1_arb},
@@ -1137,21 +1137,24 @@ pub fn session_transaction_target() -> impl Strategy<Value = TransactionTarget> 
 }
 
 pub(crate) fn transaction_stored_runtime_params_arb(
-) -> impl Strategy<Value = TransactionStoredRuntimeParams> {
+) -> impl Strategy<Value = TransactionRuntimeParams> {
     prop_oneof![
-        Just(TransactionStoredRuntimeParams::VmCasperV1),
+        Just(TransactionRuntimeParams::VmCasperV1),
         transferred_value_arb().prop_map(|transferred_value| {
-            TransactionStoredRuntimeParams::VmCasperV2 { transferred_value }
+            TransactionRuntimeParams::VmCasperV2 {
+                transferred_value,
+                seed: None,
+            }
         }),
     ]
 }
 
 pub(crate) fn transaction_session_runtime_params_arb(
-) -> impl Strategy<Value = TransactionSessionRuntimeParams> {
+) -> impl Strategy<Value = TransactionRuntimeParams> {
     prop_oneof![
-        Just(TransactionSessionRuntimeParams::VmCasperV1),
+        Just(TransactionRuntimeParams::VmCasperV1),
         (transferred_value_arb(), seed_arb()).prop_map(|(transferred_value, seed)| {
-            TransactionSessionRuntimeParams::VmCasperV2 {
+            TransactionRuntimeParams::VmCasperV2 {
                 transferred_value,
                 seed,
             }

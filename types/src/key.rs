@@ -1002,8 +1002,8 @@ impl Key {
     //     }
     // }
 
-    /// Returns the inner bytes of `self` if `self` is of type [`Key::SmartContract`], otherwise returns
-    /// `None`.
+    /// Returns the inner bytes of `self` if `self` is of type [`Key::SmartContract`], otherwise
+    /// returns `None`.
     pub fn into_package_addr(self) -> Option<PackageAddr> {
         match self {
             Key::Hash(hash) => Some(hash),
