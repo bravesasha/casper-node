@@ -10,7 +10,7 @@ use casper_types::{
         self,
         auction::{self, DelegationRate},
     },
-    ApiError, U512,
+    ApiError, DEFAULT_MINIMUM_BID_AMOUNT, U512,
 };
 
 const LARGE_DELEGATION_RATE: DelegationRate = 101;
@@ -18,7 +18,7 @@ const LARGE_DELEGATION_RATE: DelegationRate = 101;
 #[ignore]
 #[test]
 fn should_run_ee_1174_delegation_rate_too_high() {
-    let bid_amount = U512::one();
+    let bid_amount = U512::from(DEFAULT_MINIMUM_BID_AMOUNT);
 
     let mut builder = LmdbWasmTestBuilder::default();
     builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());

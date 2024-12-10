@@ -14,14 +14,15 @@ use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     runtime_args,
     system::auction::{self, DelegationRate, EraValidators, VESTING_SCHEDULE_LENGTH_MILLIS},
-    GenesisAccount, GenesisValidator, Motes, PublicKey, SecretKey, U256, U512,
+    GenesisAccount, GenesisValidator, Motes, PublicKey, SecretKey, DEFAULT_MINIMUM_BID_AMOUNT,
+    U256, U512,
 };
 
 const MINIMUM_BONDED_AMOUNT: u64 = 1_000;
 
 /// Validator with smallest stake will withdraw most of his stake to ensure we did move time forward
 /// to unlock his whole vesting schedule.
-const WITHDRAW_AMOUNT: u64 = MINIMUM_BONDED_AMOUNT - 1;
+const WITHDRAW_AMOUNT: u64 = MINIMUM_BONDED_AMOUNT - DEFAULT_MINIMUM_BID_AMOUNT;
 
 /// Initial lockup period
 const VESTING_BASE: u64 = DEFAULT_GENESIS_TIMESTAMP_MILLIS + DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS;

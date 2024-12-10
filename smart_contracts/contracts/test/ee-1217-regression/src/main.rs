@@ -31,7 +31,7 @@ fn add_bid() {
     let auction = system::get_auction();
     let args = runtime_args! {
         auction::ARG_PUBLIC_KEY => public_key,
-        auction::ARG_AMOUNT => U512::one(),
+        auction::ARG_AMOUNT => U512::from(2), // smaller amount results in Error::BondTooSmall
         auction::ARG_DELEGATION_RATE => 42u8,
     };
     runtime::call_contract::<U512>(auction, auction::METHOD_ADD_BID, args);
