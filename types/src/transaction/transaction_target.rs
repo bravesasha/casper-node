@@ -63,30 +63,40 @@ impl TransactionRuntimeParams {
             TransactionRuntimeParams::VmCasperV2 { seed, .. } => *seed,
         }
     }
+
+    pub fn serialized_field_lengths(&self) -> Vec<usize> {
+        match self {
+            TransactionRuntimeParams::VmCasperV1 => vec![crate::bytesrepr::U8_SERIALIZED_LENGTH],
+            TransactionRuntimeParams::VmCasperV2 {
+                transferred_value,
+                seed,
+            } => {
+                vec![
+                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
+                    transferred_value.serialized_length(),
+                    seed.serialized_length(),
+                ]
+            }
+        }
+    }
 }
 
 impl ToBytes for TransactionRuntimeParams {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         match self {
             TransactionRuntimeParams::VmCasperV1 => {
-                CalltableSerializationEnvelopeBuilder::new(vec![
-                    crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                ])?
-                .add_field(TAG_FIELD_INDEX, &VM_CASPER_V1_TAG)?
-                .binary_payload_bytes()
+                CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
+                    .add_field(TAG_FIELD_INDEX, &VM_CASPER_V1_TAG)?
+                    .binary_payload_bytes()
             }
             TransactionRuntimeParams::VmCasperV2 {
                 transferred_value,
                 seed,
-            } => CalltableSerializationEnvelopeBuilder::new(vec![
-                crate::bytesrepr::U8_SERIALIZED_LENGTH,
-                transferred_value.serialized_length(),
-                seed.serialized_length(),
-            ])?
-            .add_field(TAG_FIELD_INDEX, &VM_CASPER_V2_TAG)?
-            .add_field(TRANSFERRED_VALUE_INDEX, transferred_value)?
-            .add_field(SEED_VALUE_INDEX, seed)?
-            .binary_payload_bytes(),
+            } => CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
+                .add_field(TAG_FIELD_INDEX, &VM_CASPER_V2_TAG)?
+                .add_field(TRANSFERRED_VALUE_INDEX, transferred_value)?
+                .add_field(SEED_VALUE_INDEX, seed)?
+                .binary_payload_bytes(),
         }
     }
 
@@ -111,7 +121,7 @@ impl ToBytes for TransactionRuntimeParams {
 
 impl FromBytes for TransactionRuntimeParams {
     fn from_bytes(bytes: &[u8]) -> Result<(TransactionRuntimeParams, &[u8]), Error> {
-        let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(4, bytes)?;
+        let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(3, bytes)?;
         let window = binary_payload.start_consuming()?.ok_or(Formatting)?;
         window.verify_index(TAG_FIELD_INDEX)?;
         let (tag, window) = window.deserialize_and_maybe_next::<u8>()?;
