@@ -32,8 +32,6 @@ pub const ARG_DELEGATOR: &str = "delegator";
 pub const ARG_DELEGATOR_PURSE: &str = "delegator_purse";
 /// Named constant for `delegators`.
 pub const ARG_DELEGATORS: &str = "delegators";
-/// Named constant for `delegator_kinds`.
-pub const ARG_DELEGATOR_KINDS: &str = "delegator_kinds";
 /// Named constant for `reservations`.
 pub const ARG_RESERVATIONS: &str = "reservations";
 /// Named constant for `validator_purse`.

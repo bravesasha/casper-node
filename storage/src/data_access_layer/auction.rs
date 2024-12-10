@@ -307,7 +307,7 @@ impl AuctionMethod {
         max_delegators_per_validator: u32,
     ) -> Result<Self, AuctionMethodError> {
         let validator = Self::get_named_argument(runtime_args, auction::ARG_VALIDATOR)?;
-        let delegators = Self::get_named_argument(runtime_args, auction::ARG_DELEGATOR_KINDS)?;
+        let delegators = Self::get_named_argument(runtime_args, auction::ARG_DELEGATORS)?;
 
         Ok(Self::CancelReservations {
             validator,
