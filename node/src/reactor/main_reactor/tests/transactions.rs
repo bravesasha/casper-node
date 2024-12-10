@@ -9,7 +9,8 @@ use casper_types::{
     addressable_entity::NamedKeyAddr,
     runtime_args,
     system::mint::{ARG_AMOUNT, ARG_TARGET},
-    AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionRuntime, LARGE_WASM_LANE_ID,
+    AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionRuntimeParams,
+    LARGE_WASM_LANE_ID,
 };
 use once_cell::sync::Lazy;
 
@@ -98,9 +99,7 @@ async fn send_wasm_transaction(
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(chain_name)
         .with_pricing_mode(pricing)
@@ -1771,9 +1770,7 @@ async fn only_refunds_are_burnt_no_fee_custom_payment() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(PricingMode::PaymentLimited {
@@ -1874,9 +1871,7 @@ async fn no_refund_no_fee_custom_payment() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(PricingMode::PaymentLimited {
@@ -2440,9 +2435,7 @@ fn invalid_wasm_txn(initiator: Arc<SecretKey>, pricing_mode: PricingMode) -> Tra
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_pricing_mode(pricing_mode)
@@ -3149,9 +3142,7 @@ async fn insufficient_funds_transfer_from_purse() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_runtime_args(runtime_args! { "destination" => purse_name, "amount" => U512::zero() })
         .with_chain_name(CHAIN_NAME)
@@ -3277,9 +3268,7 @@ async fn charge_when_session_code_succeeds() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_runtime_args(runtime_args! {
             ARG_TARGET => CHARLIE_PUBLIC_KEY.to_account_hash(),
@@ -3350,9 +3339,7 @@ async fn charge_when_session_code_fails_with_user_error() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())
@@ -3420,9 +3407,7 @@ async fn charge_when_session_code_runs_out_of_gas() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())
@@ -3491,7 +3476,7 @@ async fn successful_purse_to_purse_transfer() {
         Bytes::from(std::fs::read(purse_create_contract).expect("cannot read module bytes"));
 
     let mut txn = Transaction::from(
-        TransactionV1Builder::new_session(false, module_bytes,TransactionRuntime::VmCasperV1, 0, None)
+        TransactionV1Builder::new_session(false, module_bytes, TransactionRuntimeParams::VmCasperV1)
             .with_runtime_args(
                 runtime_args! { "destination" => purse_name, "amount" => U512::from(MAX_PAYMENT_AMOUNT) + U512::one() },
             )
@@ -3584,7 +3569,7 @@ async fn successful_purse_to_account_transfer() {
         Bytes::from(std::fs::read(purse_create_contract).expect("cannot read module bytes"));
 
     let mut txn = Transaction::from(
-        TransactionV1Builder::new_session(false, module_bytes, TransactionRuntime::VmCasperV1, 0, None)
+        TransactionV1Builder::new_session(false, module_bytes, TransactionRuntimeParams::VmCasperV1)
             .with_runtime_args(
                 runtime_args! { "destination" => purse_name, "amount" => U512::from(MAX_PAYMENT_AMOUNT) + U512::one() },
             )
@@ -3748,9 +3733,7 @@ async fn out_of_gas_txn_does_not_produce_effects() {
         TransactionV1Builder::new_session(
             false,
             module_bytes,
-            TransactionRuntime::VmCasperV1,
-            0,
-            None,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_chain_name(CHAIN_NAME)
         .with_initiator_addr(BOB_PUBLIC_KEY.clone())

@@ -13,8 +13,8 @@ use serde::Serialize;
 #[cfg(doc)]
 use super::TransactionV1;
 use crate::{
-    bytesrepr, crypto, CLType, DisplayIter, PricingMode, TimeDiff, Timestamp,
-    TransactionEntryPoint, TransactionRuntime, U512,
+    addressable_entity::ContractRuntimeTag, bytesrepr, crypto, CLType, DisplayIter, PricingMode,
+    TimeDiff, Timestamp, TransactionEntryPoint, U512,
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -196,7 +196,7 @@ pub enum InvalidTransaction {
     /// The transaction runtime is invalid.
     InvalidTransactionRuntime {
         /// The expected runtime as specified by the chainspec.
-        expected: TransactionRuntime,
+        expected: ContractRuntimeTag,
     },
     /// The transaction is missing a seed field.
     MissingSeed,

@@ -21,7 +21,7 @@ use casper_storage::{
 };
 use casper_types::{
     execution::Effects, BlockHash, Digest, Gas, Key, TransactionEntryPoint,
-    TransactionInvocationTarget, TransactionTarget, U512,
+    TransactionInvocationTarget, TransactionRuntimeParams, TransactionTarget, U512,
 };
 use thiserror::Error;
 use tracing::info;
@@ -102,6 +102,8 @@ pub(crate) enum InvalidRequest {
     InvalidGasLimit(U512),
     #[error("Expected transferred value")]
     ExpectedTransferredValue,
+    #[error("Expected V2 runtime")]
+    ExpectedV2Runtime,
 }
 
 impl WasmV2Request {
@@ -139,6 +141,7 @@ impl WasmV2Request {
             Install {
                 module_bytes: Bytes,
                 entry_point: String,
+                transferred_value: u64,
                 seed: Option<[u8; 32]>,
             },
             Session {
@@ -153,22 +156,28 @@ impl WasmV2Request {
         let target = transaction.target().ok_or(InvalidRequest::ExpectedTarget)?;
         let target = match target {
             TransactionTarget::Native => todo!(), //
-            TransactionTarget::Stored {
-                id,
-                runtime: _,
-                transferred_value: _,
-            } => match transaction.entry_point() {
+            TransactionTarget::Stored { id, runtime: _ } => match transaction.entry_point() {
                 TransactionEntryPoint::Custom(entry_point) => Target::Stored {
                     id: id.clone(),
                     entry_point: entry_point.clone(),
                 },
                 _ => todo!(),
             },
+
+            TransactionTarget::Session {
+                module_bytes: _,
+                runtime: TransactionRuntimeParams::VmCasperV1,
+                is_install_upgrade: _, // TODO: Handle this
+            } => {
+                return Err(InvalidRequest::ExpectedV2Runtime);
+            }
             TransactionTarget::Session {
                 module_bytes,
-                runtime: _,
-                transferred_value: _,
-                seed,
+                runtime:
+                    TransactionRuntimeParams::VmCasperV2 {
+                        transferred_value,
+                        seed,
+                    },
                 is_install_upgrade: _, // TODO: Handle this
             } => match transaction.entry_point() {
                 TransactionEntryPoint::Call => Target::Session {
@@ -177,6 +186,7 @@ impl WasmV2Request {
                 TransactionEntryPoint::Custom(entry_point) => Target::Install {
                     module_bytes: module_bytes.clone().take_inner().into(),
                     entry_point: entry_point.to_string(),
+                    transferred_value,
                     seed,
                 },
                 _ => todo!(),
@@ -189,6 +199,7 @@ impl WasmV2Request {
             Target::Install {
                 module_bytes,
                 entry_point,
+                transferred_value,
                 seed,
             } => {
                 let mut builder = InstallContractRequestBuilder::default();
@@ -212,6 +223,10 @@ impl WasmV2Request {
                 if let Some(seed) = seed {
                     builder = builder.with_seed(seed);
                 }
+
+                // Value is expected to be the same as transferred value, it's just taken through
+                // different API.
+                debug_assert_eq!(transferred_value, value);
 
                 let install_request = builder
                     .with_initiator(initiator_addr.account_hash())

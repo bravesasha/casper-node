@@ -8,8 +8,8 @@ use crate::{
 };
 #[cfg(any(feature = "testing", test))]
 use crate::{
-    PublicKey, RuntimeArgs, TransactionInvocationTarget, TransactionRuntime, TransferTarget,
-    AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
+    PublicKey, RuntimeArgs, TransactionInvocationTarget, TransferTarget, AUCTION_LANE_ID,
+    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
 };
 #[cfg(any(feature = "std", feature = "testing", test))]
 use alloc::collections::BTreeMap;
@@ -194,9 +194,7 @@ impl FieldsContainer {
                 let target = TransactionTarget::Session {
                     is_install_upgrade,
                     module_bytes: Bytes::from(buffer),
-                    runtime: TransactionRuntime::VmCasperV1,
-                    transferred_value: rng.gen(),
-                    seed: rng.gen(),
+                    runtime: crate::TransactionRuntimeParams::VmCasperV1,
                 };
                 FieldsContainer::new(
                     TransactionArgs::Named(RuntimeArgs::random(rng)),
@@ -239,10 +237,8 @@ impl FieldsContainer {
     fn random_install_upgrade(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Session {
             module_bytes: Bytes::from(rng.random_vec(0..100)),
-            runtime: TransactionRuntime::VmCasperV1,
+            runtime: crate::TransactionRuntimeParams::VmCasperV1,
             is_install_upgrade: true,
-            transferred_value: 0,
-            seed: None,
         };
         FieldsContainer::new(
             TransactionArgs::Named(RuntimeArgs::random(rng)),
@@ -282,8 +278,7 @@ impl FieldsContainer {
     fn random_standard(rng: &mut TestRng) -> Self {
         let target = TransactionTarget::Stored {
             id: TransactionInvocationTarget::random(rng),
-            runtime: TransactionRuntime::VmCasperV1,
-            transferred_value: rng.gen(),
+            runtime: crate::transaction::transaction_target::TransactionRuntimeParams::VmCasperV1,
         };
         FieldsContainer::new(
             TransactionArgs::Named(RuntimeArgs::random(rng)),

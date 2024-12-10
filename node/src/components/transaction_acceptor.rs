@@ -6,7 +6,7 @@ mod tests;
 
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
-use casper_types::{InvalidTransaction, InvalidTransactionV1};
+use casper_types::{ContractRuntimeTag, InvalidTransaction, InvalidTransactionV1};
 use datasize::DataSize;
 use prometheus::Registry;
 use tracing::{debug, error, trace};
@@ -19,7 +19,7 @@ use casper_types::{
     EntityKind, EntityVersion, EntityVersionKey, ExecutableDeployItem,
     ExecutableDeployItemIdentifier, InitiatorAddr, Key, Package, PackageAddr, PackageHash,
     PackageIdentifier, Timestamp, Transaction, TransactionEntryPoint, TransactionInvocationTarget,
-    TransactionRuntime, TransactionTarget, DEFAULT_ENTRY_POINT_NAME, U512,
+    TransactionTarget, DEFAULT_ENTRY_POINT_NAME, U512,
 };
 
 use crate::{
@@ -657,7 +657,7 @@ impl TransactionAcceptor {
         entry_point_exist: bool,
     ) -> Effects<Event> {
         match addressable_entity.kind() {
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1)
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1)
             | EntityKind::Account(_)
             | EntityKind::System(_) => {
                 if !entry_point_exist {
@@ -672,7 +672,7 @@ impl TransactionAcceptor {
                 }
                 self.validate_transaction_cryptography(effect_builder, event_metadata)
             }
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV2) => {
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV2) => {
                 // Engine V2 does not store entrypoint information on chain and relies entirely on
                 // the Wasm itself.
                 self.validate_transaction_cryptography(effect_builder, event_metadata)

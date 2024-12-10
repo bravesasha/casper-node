@@ -38,9 +38,9 @@ use casper_types::{
     },
     addressable_entity::{
         self, ActionThresholds, ActionType, AddressableEntity, AddressableEntityHash,
-        AssociatedKeys, EntityKindTag, EntryPoint, EntryPointAccess, EntryPointType, EntryPoints,
-        MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue, Parameter, Weight,
-        DEFAULT_ENTRY_POINT_NAME,
+        AssociatedKeys, ContractRuntimeTag, EntityKindTag, EntryPoint, EntryPointAccess,
+        EntryPointType, EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue,
+        Parameter, Weight, DEFAULT_ENTRY_POINT_NAME,
     },
     bytesrepr::{self, Bytes, FromBytes, ToBytes},
     contract_messages::{
@@ -60,9 +60,8 @@ use casper_types::{
     ByteCodeKind, CLTyped, CLValue, ContextAccessRights, Contract, ContractWasm, EntityAddr,
     EntityKind, EntityVersion, EntityVersionKey, EntityVersions, Gas, GrantedAccess, Group, Groups,
     HashAddr, HostFunction, HostFunctionCost, InitiatorAddr, Key, NamedArg, Package, PackageHash,
-    PackageStatus, Phase, PublicKey, RuntimeArgs, RuntimeFootprint, StoredValue,
-    TransactionRuntime, Transfer, TransferResult, TransferV2, TransferredTo, URef,
-    DICTIONARY_ITEM_KEY_MAX_LENGTH, U512,
+    PackageStatus, Phase, PublicKey, RuntimeArgs, RuntimeFootprint, StoredValue, Transfer,
+    TransferResult, TransferV2, TransferredTo, URef, DICTIONARY_ITEM_KEY_MAX_LENGTH, U512,
 };
 
 use crate::{
@@ -1893,14 +1892,14 @@ where
                 EntityKind::System(_) | EntityKind::Account(_) => {
                     Key::ByteCode(ByteCodeAddr::Empty)
                 }
-                EntityKind::SmartContract(TransactionRuntime::VmCasperV1) => {
+                EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1) => {
                     if self.context.engine_config().enable_entity {
                         Key::ByteCode(ByteCodeAddr::new_wasm_addr(byte_code_addr))
                     } else {
                         Key::Hash(byte_code_addr)
                     }
                 }
-                EntityKind::SmartContract(runtime @ TransactionRuntime::VmCasperV2) => {
+                EntityKind::SmartContract(runtime @ ContractRuntimeTag::VmCasperV2) => {
                     return Err(ExecError::IncompatibleRuntime(runtime));
                 }
             };
@@ -2576,7 +2575,7 @@ where
             main_purse,
             associated_keys,
             action_thresholds,
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         );
         let entity_key = Key::AddressableEntity(entity_addr);
         self.context.metered_write_gs_unsafe(entity_key, entity)?;

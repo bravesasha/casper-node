@@ -23,10 +23,9 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, NamedKeyAddr},
     AddressableEntity, AddressableEntityHash, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, CLType, Digest, EntityAddr, EntityKind, EntryPoint, EntryPointAccess,
-    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups, HashAddr, Key,
-    Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, TransactionRuntime, URef,
-    U512,
+    ByteCodeKind, CLType, ContractRuntimeTag, Digest, EntityAddr, EntityKind, EntryPoint,
+    EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups,
+    HashAddr, Key, Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
 use num_derive::FromPrimitive;
@@ -506,7 +505,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         main_purse,
         AssociatedKeys::default(),
         ActionThresholds::default(),
-        EntityKind::SmartContract(TransactionRuntime::VmCasperV2),
+        EntityKind::SmartContract(ContractRuntimeTag::VmCasperV2),
     );
 
     caller.context_mut().tracking_copy.write(
