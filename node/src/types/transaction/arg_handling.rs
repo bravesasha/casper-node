@@ -1169,7 +1169,7 @@ mod tests {
 
         // Missing "validator".
         let args = runtime_args! {
-            CANCEL_RESERVATIONS_ARG_DELEGATORS.name  => rng.random_vec::<Range<usize>, PublicKey>(0..100),
+            CANCEL_RESERVATIONS_ARG_DELEGATORS.name  => rng.random_vec::<Range<usize>, DelegatorKind>(0..100),
         };
         let expected_error = InvalidTransactionV1::MissingArg {
             arg_name: CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
@@ -1199,7 +1199,7 @@ mod tests {
         // Wrong "validator" type.
         let args = runtime_args! {
             CANCEL_RESERVATIONS_ARG_VALIDATOR.name => rng.random_vec::<Range<usize>, PublicKey>(0..100),
-            CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.random_vec::<Range<usize>, PublicKey>(0..100),
+            CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.random_vec::<Range<usize>, DelegatorKind>(0..100),
         };
         let expected_error = InvalidTransactionV1::UnexpectedArgType {
             arg_name: CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
@@ -1218,7 +1218,7 @@ mod tests {
         };
         let expected_error = InvalidTransactionV1::UnexpectedArgType {
             arg_name: CANCEL_RESERVATIONS_ARG_DELEGATORS.name.to_string(),
-            expected: vec![CLType::List(Box::new(CLType::PublicKey))],
+            expected: vec![CLType::List(Box::new(CLType::Any))],
             got: CLType::U8,
         };
         assert_eq!(
@@ -1250,6 +1250,14 @@ mod tests {
         );
         assert_eq!(
             has_valid_redelegate_args(&args).as_ref(),
+            Err(&expected_error)
+        );
+        assert_eq!(
+            has_valid_add_reservations_args(&args).as_ref(),
+            Err(&expected_error)
+        );
+        assert_eq!(
+            has_valid_cancel_reservations_args(&args).as_ref(),
             Err(&expected_error)
         );
     }
