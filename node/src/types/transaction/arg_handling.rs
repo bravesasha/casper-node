@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use casper_types::{
     account::AccountHash,
     bytesrepr::FromBytes,
-    system::auction::{Reservation, ARG_VALIDATOR},
+    system::auction::{DelegatorKind, Reservation, ARG_VALIDATOR},
     CLType, CLTyped, CLValue, CLValueError, InvalidTransactionV1, PublicKey, RuntimeArgs,
     TransactionArgs, URef, U512,
 };
@@ -53,7 +53,7 @@ const ADD_RESERVATIONS_ARG_RESERVATIONS: RequiredArg<Vec<Reservation>> =
     RequiredArg::new("reservations");
 
 const CANCEL_RESERVATIONS_ARG_VALIDATOR: RequiredArg<PublicKey> = RequiredArg::new("validator");
-const CANCEL_RESERVATIONS_ARG_DELEGATORS: RequiredArg<Vec<PublicKey>> =
+const CANCEL_RESERVATIONS_ARG_DELEGATORS: RequiredArg<Vec<DelegatorKind>> =
     RequiredArg::new("delegators");
 
 struct RequiredArg<T> {
@@ -428,7 +428,7 @@ pub fn has_valid_add_reservations_args(args: &TransactionArgs) -> Result<(), Inv
 #[cfg(test)]
 pub fn new_cancel_reservations_args(
     validator: PublicKey,
-    delegators: Vec<PublicKey>,
+    delegators: Vec<DelegatorKind>,
 ) -> Result<RuntimeArgs, CLValueError> {
     let mut args = RuntimeArgs::new();
     CANCEL_RESERVATIONS_ARG_VALIDATOR.insert(&mut args, validator)?;
@@ -1169,7 +1169,7 @@ mod tests {
 
         // Missing "validator".
         let args = runtime_args! {
-            CANCEL_RESERVATIONS_ARG_DELEGATORS.name  => rng.random_vec::<Range<usize>, PublicKey>(0..100),
+            CANCEL_RESERVATIONS_ARG_DELEGATORS.name  => rng.random_vec::<Range<usize>, DelegatorKind>(0..100),
         };
         let expected_error = InvalidTransactionV1::MissingArg {
             arg_name: CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
@@ -1199,7 +1199,7 @@ mod tests {
         // Wrong "validator" type.
         let args = runtime_args! {
             CANCEL_RESERVATIONS_ARG_VALIDATOR.name => rng.random_vec::<Range<usize>, PublicKey>(0..100),
-            CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.random_vec::<Range<usize>, PublicKey>(0..100),
+            CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.random_vec::<Range<usize>, DelegatorKind>(0..100),
         };
         let expected_error = InvalidTransactionV1::UnexpectedArgType {
             arg_name: CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
@@ -1218,7 +1218,7 @@ mod tests {
         };
         let expected_error = InvalidTransactionV1::UnexpectedArgType {
             arg_name: CANCEL_RESERVATIONS_ARG_DELEGATORS.name.to_string(),
-            expected: vec![CLType::List(Box::new(CLType::PublicKey))],
+            expected: vec![CLType::List(Box::new(CLType::Any))],
             got: CLType::U8,
         };
         assert_eq!(
@@ -1250,6 +1250,14 @@ mod tests {
         );
         assert_eq!(
             has_valid_redelegate_args(&args).as_ref(),
+            Err(&expected_error)
+        );
+        assert_eq!(
+            has_valid_add_reservations_args(&args).as_ref(),
+            Err(&expected_error)
+        );
+        assert_eq!(
+            has_valid_cancel_reservations_args(&args).as_ref(),
             Err(&expected_error)
         );
     }

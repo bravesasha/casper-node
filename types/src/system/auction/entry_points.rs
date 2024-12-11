@@ -12,9 +12,9 @@ use crate::{
 use alloc::boxed::Box;
 
 use super::{
-    Reservation, ARG_MAXIMUM_DELEGATION_AMOUNT, ARG_MINIMUM_DELEGATION_AMOUNT, ARG_NEW_PUBLIC_KEY,
-    ARG_RESERVATIONS, ARG_REWARDS_MAP, METHOD_ADD_RESERVATIONS, METHOD_CANCEL_RESERVATIONS,
-    METHOD_CHANGE_BID_PUBLIC_KEY,
+    DelegatorKind, Reservation, ARG_MAXIMUM_DELEGATION_AMOUNT, ARG_MINIMUM_DELEGATION_AMOUNT,
+    ARG_NEW_PUBLIC_KEY, ARG_RESERVATIONS, ARG_REWARDS_MAP, METHOD_ADD_RESERVATIONS,
+    METHOD_CANCEL_RESERVATIONS, METHOD_CHANGE_BID_PUBLIC_KEY,
 };
 
 /// Creates auction contract entry points.
@@ -186,7 +186,10 @@ pub fn auction_entry_points() -> EntryPoints {
         METHOD_CANCEL_RESERVATIONS,
         vec![
             Parameter::new(ARG_VALIDATOR, PublicKey::cl_type()),
-            Parameter::new(ARG_DELEGATORS, CLType::List(Box::new(PublicKey::cl_type()))),
+            Parameter::new(
+                ARG_DELEGATORS,
+                CLType::List(Box::new(DelegatorKind::cl_type())),
+            ),
         ],
         CLType::Unit,
         EntryPointAccess::Public,
