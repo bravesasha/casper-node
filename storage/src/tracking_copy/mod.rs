@@ -853,8 +853,8 @@ where
                 StoredValue::EntryPoint(_) => {
                     return Ok(query.into_not_found_result("EntryPoint value found."));
                 }
-                StoredValue::Prepaid(_) => {
-                    return Ok(query.into_not_found_result("Prepaid value found."))
+                StoredValue::Prepayment(_) => {
+                    return Ok(query.into_not_found_result("Prepayment value found."))
                 }
                 StoredValue::RawBytes(_) => {
                     return Ok(query.into_not_found_result("RawBytes value found."));

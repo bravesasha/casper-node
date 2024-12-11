@@ -1,4 +1,4 @@
 //! Contains implementation of the gas prepayment system
-mod prepaid_kind;
+mod prepayment_kind;
 
-pub use prepaid_kind::PrepaidKind;
+pub use prepayment_kind::PrepaymentKind;
