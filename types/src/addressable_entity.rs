@@ -67,7 +67,6 @@ use crate::{
     contract_messages::TopicNameHash,
     contracts::{Contract, ContractHash},
     system::SystemEntityType,
-    transaction::TransactionRuntime,
     uref::{self, URef},
     AccessRights, ApiError, CLType, CLTyped, CLValue, CLValueError, ContextAccessRights, HashAddr,
     Key, NamedKeys, PackageHash, ProtocolVersion, PublicKey, Tagged, BLAKE2B_DIGEST_LENGTH,
@@ -507,6 +506,73 @@ impl Distribution<EntityKindTag> for Standard {
     }
 }
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "datasize", derive(DataSize))]
+#[cfg_attr(
+    feature = "json-schema",
+    derive(JsonSchema),
+    schemars(description = "Runtime used to execute a Transaction.")
+)]
+#[serde(deny_unknown_fields)]
+#[repr(u8)]
+pub enum ContractRuntimeTag {
+    VmCasperV1,
+    VmCasperV2,
+}
+
+#[cfg(any(feature = "testing", test))]
+impl Distribution<ContractRuntimeTag> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ContractRuntimeTag {
+        match rng.gen_range(0..=1) {
+            0 => ContractRuntimeTag::VmCasperV1,
+            1 => ContractRuntimeTag::VmCasperV2,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl ToBytes for ContractRuntimeTag {
+    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
+        (*self as u8).to_bytes()
+    }
+
+    fn serialized_length(&self) -> usize {
+        U8_SERIALIZED_LENGTH
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
+        (*self as u8).write_bytes(writer)
+    }
+}
+
+impl FromBytes for ContractRuntimeTag {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
+        let (tag, remainder) = u8::from_bytes(bytes)?;
+        if tag == ContractRuntimeTag::VmCasperV1 as u8 {
+            Ok((ContractRuntimeTag::VmCasperV1, remainder))
+        } else if tag == ContractRuntimeTag::VmCasperV2 as u8 {
+            Ok((ContractRuntimeTag::VmCasperV2, remainder))
+        } else {
+            Err(bytesrepr::Error::Formatting)
+        }
+    }
+}
+
+impl Display for ContractRuntimeTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ContractRuntimeTag::VmCasperV1 => write!(f, "vm-casper-v1"),
+            ContractRuntimeTag::VmCasperV2 => write!(f, "vm-casper-v2"),
+        }
+    }
+}
+impl ContractRuntimeTag {
+    /// Returns the tag of the [`ContractRuntimeTag`].
+    pub fn tag(&self) -> u8 {
+        *self as u8
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
@@ -517,7 +583,7 @@ pub enum EntityKind {
     /// Package associated with an Account hash.
     Account(AccountHash),
     /// Packages associated with Wasm stored on chain.
-    SmartContract(TransactionRuntime),
+    SmartContract(ContractRuntimeTag),
 }
 
 impl EntityKind {
@@ -632,7 +698,7 @@ impl FromBytes for EntityKind {
                 Ok((EntityKind::Account(account_hash), remainder))
             }
             EntityKindTag::SmartContract => {
-                let (transaction_runtime, remainder) = TransactionRuntime::from_bytes(remainder)?;
+                let (transaction_runtime, remainder) = FromBytes::from_bytes(remainder)?;
                 Ok((EntityKind::SmartContract(transaction_runtime), remainder))
             }
         }
@@ -1670,7 +1736,7 @@ impl Default for AddressableEntity {
             main_purse: URef::default(),
             action_thresholds: ActionThresholds::default(),
             associated_keys: AssociatedKeys::default(),
-            entity_kind: EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            entity_kind: EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         }
     }
 }
@@ -1684,7 +1750,7 @@ impl From<Contract> for AddressableEntity {
             URef::default(),
             AssociatedKeys::default(),
             ActionThresholds::default(),
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         )
     }
 }
@@ -1865,7 +1931,7 @@ mod tests {
             associated_keys,
             ActionThresholds::new(Weight::new(1), Weight::new(1), Weight::new(1))
                 .expect("should create thresholds"),
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         );
         let access_rights = contract.extract_access_rights(entity_hash, &named_keys);
         let expected_uref = URef::new([42; UREF_ADDR_LENGTH], AccessRights::READ_ADD_WRITE);

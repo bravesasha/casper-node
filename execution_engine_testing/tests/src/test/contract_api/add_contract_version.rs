@@ -13,7 +13,7 @@ use casper_types::{
     bytesrepr::{Bytes, ToBytes},
     ApiError, BlockTime, Digest, EraId, InitiatorAddr, Key, PricingMode, ProtocolVersion,
     PublicKey, RuntimeArgs, SecretKey, TimeDiff, Timestamp, Transaction, TransactionArgs,
-    TransactionEntryPoint, TransactionRuntime, TransactionScheduling, TransactionTarget,
+    TransactionEntryPoint, TransactionRuntimeParams, TransactionScheduling, TransactionTarget,
     TransactionV1, TransactionV1Payload,
 };
 
@@ -49,8 +49,7 @@ fn try_add_contract_version(
     let txn = new_transaction_v1_session(
         is_install_upgrade,
         module_bytes,
-        casper_types::TransactionRuntime::VmCasperV1,
-        0,
+        TransactionRuntimeParams::VmCasperV1,
         &DEFAULT_ACCOUNT_SECRET_KEY,
     );
 
@@ -111,8 +110,7 @@ fn try_add_contract_version(
 pub fn new_transaction_v1_session(
     is_install_upgrade: bool,
     module_bytes: Bytes,
-    runtime: TransactionRuntime,
-    transferred_value: u64,
+    runtime: TransactionRuntimeParams,
     secret_key: &SecretKey,
 ) -> TransactionV1 {
     let timestamp = Timestamp::now();
@@ -121,8 +119,6 @@ pub fn new_transaction_v1_session(
         is_install_upgrade,
         module_bytes,
         runtime,
-        transferred_value,
-        seed: None,
     };
     let args = TransactionArgs::Named(RuntimeArgs::new());
     let entry_point = TransactionEntryPoint::Call;

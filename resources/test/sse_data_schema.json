@@ -4433,7 +4433,7 @@
           ],
           "properties": {
             "SmartContract": {
-              "$ref": "#/definitions/TransactionRuntime"
+              "$ref": "#/definitions/ContractRuntimeTag"
             }
           },
           "additionalProperties": false
@@ -4473,23 +4473,12 @@
         }
       ]
     },
-    "TransactionRuntime": {
+    "ContractRuntimeTag": {
       "description": "Runtime used to execute a Transaction.",
-      "oneOf": [
-        {
-          "description": "The Casper Version 1 Virtual Machine.",
-          "type": "string",
-          "enum": [
-            "VmCasperV1"
-          ]
-        },
-        {
-          "description": "The Casper Version 2 Virtual Machine.",
-          "type": "string",
-          "enum": [
-            "VmCasperV2"
-          ]
-        }
+      "type": "string",
+      "enum": [
+        "VmCasperV1",
+        "VmCasperV2"
       ]
     },
     "PackageHash": {

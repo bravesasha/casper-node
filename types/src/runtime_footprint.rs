@@ -1,10 +1,10 @@
 use crate::{
     account::AccountHash,
-    addressable_entity::{AssociatedKeys, Weight},
+    addressable_entity::{AssociatedKeys, ContractRuntimeTag, Weight},
     contracts::{ContractHash, NamedKeys},
     system::SystemEntityType,
     Account, AddressableEntity, ContextAccessRights, Contract, EntityAddr, EntityKind, EntryPoints,
-    HashAddr, Key, ProtocolVersion, TransactionRuntime, URef,
+    HashAddr, Key, ProtocolVersion, URef,
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -164,7 +164,7 @@ impl RuntimeFootprint {
         let associated_keys = AssociatedKeys::empty_keys();
 
         let entity_kind = match system_entity_type {
-            None => EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            None => EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
             Some(kind) => EntityKind::System(kind),
         };
 
