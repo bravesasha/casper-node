@@ -5,8 +5,8 @@ use casper_engine_test_support::{
 use casper_types::{
     runtime_args,
     system::auction::{
-        BidAddr, BidKind, BidsExt, DelegationRate, DelegatorKind, EraInfo, ValidatorBid,
-        ARG_AMOUNT, ARG_NEW_VALIDATOR, ARG_VALIDATOR,
+        BidAddr, BidKind, BidsExt, DelegationRate, DelegatorBid, DelegatorKind, EraInfo,
+        ValidatorBid, ARG_AMOUNT, ARG_NEW_VALIDATOR, ARG_VALIDATOR,
     },
     GenesisAccount, GenesisValidator, Key, Motes, PublicKey, SecretKey, StoredValue, U512,
 };
@@ -62,6 +62,7 @@ fn should_support_contract_staking() {
     let stake = "STAKE".to_string();
     let unstake = "UNSTAKE".to_string();
     let restake = "RESTAKE".to_string();
+    let get_staked_amount = "STAKED_AMOUNT".to_string();
     let account = *DEFAULT_ACCOUNT_ADDR;
     let seed_amount = U512::from(10_000_000_000_000_000_u64);
     let delegate_amount = U512::from(5_000_000_000_000_000_u64);
@@ -153,6 +154,31 @@ fn should_support_contract_staking() {
     let pre_delegation_balance = builder.get_purse_balance(contract_purse);
     assert_eq!(pre_delegation_balance, seed_amount);
 
+    // check delegated amount from contract
+    builder
+        .exec(
+            ExecuteRequestBuilder::contract_call_by_name(
+                account,
+                &contract_name,
+                &entry_point_name,
+                runtime_args! {
+                    ARG_ACTION => get_staked_amount.clone(),
+                    ARG_VALIDATOR => validator_pk.clone(),
+                },
+            )
+            .build(),
+        )
+        .commit()
+        .expect_success();
+
+    let result = builder.get_last_exec_result().unwrap();
+    let staked_amount: U512 = result.ret().unwrap().to_owned().into_t().unwrap();
+    assert_eq!(
+        staked_amount,
+        U512::zero(),
+        "staked amount should be zero prior to staking"
+    );
+
     // stake from contract
     builder
         .exec(
@@ -199,6 +225,30 @@ fn should_support_contract_staking() {
             "staked amount should match delegation amount"
         );
     }
+
+    // check delegated amount from contract
+    builder
+        .exec(
+            ExecuteRequestBuilder::contract_call_by_name(
+                account,
+                &contract_name,
+                &entry_point_name,
+                runtime_args! {
+                    ARG_ACTION => get_staked_amount.clone(),
+                    ARG_VALIDATOR => validator_pk.clone(),
+                },
+            )
+            .build(),
+        )
+        .commit()
+        .expect_success();
+
+    let result = builder.get_last_exec_result().unwrap();
+    let staked_amount: U512 = result.ret().unwrap().to_owned().into_t().unwrap();
+    assert_eq!(
+        staked_amount, delegate_amount,
+        "staked amount should match delegation amount"
+    );
 
     for _ in 0..=auction_delay {
         // crank era
@@ -484,4 +534,122 @@ fn should_not_enforce_max_spending_when_main_purse_not_in_use() {
     builder
         .query(None, delegation_key, &[])
         .expect("should have delegation bid");
+}
+
+#[ignore]
+#[test]
+fn should_read_bid_with_vesting_schedule_populated() {
+    const ARG_ACTION: &str = "action";
+    let purse_name = "staking_purse".to_string();
+    let contract_name = "staking".to_string();
+    let entry_point_name = "run".to_string();
+    let get_staked_amount = "STAKED_AMOUNT".to_string();
+    let account = *DEFAULT_ACCOUNT_ADDR;
+    let seed_amount = U512::from(10_000_000_000_000_000_u64);
+    let validator_pk = &*DEFAULT_PROPOSER_PUBLIC_KEY;
+
+    let mut builder = LmdbWasmTestBuilder::default();
+    let mut genesis_request = LOCAL_GENESIS_REQUEST.clone();
+    genesis_request.set_enable_entity(false);
+    genesis_request.push_genesis_validator(
+        validator_pk,
+        GenesisValidator::new(
+            Motes::new(10_000_000_000_000_000_u64),
+            DelegationRate::zero(),
+        ),
+    );
+    builder.run_genesis(genesis_request);
+
+    builder
+        .exec(
+            ExecuteRequestBuilder::standard(
+                account,
+                STORED_STAKING_CONTRACT_NAME,
+                runtime_args! {
+                    ARG_AMOUNT => seed_amount
+                },
+            )
+            .build(),
+        )
+        .commit()
+        .expect_success();
+
+    let default_account = builder.get_account(account).expect("should have account");
+    let named_keys = default_account.named_keys();
+
+    let contract_key = named_keys
+        .get(&contract_name)
+        .expect("contract_name key should exist");
+
+    let stored_contract = builder
+        .query(None, *contract_key, &[])
+        .expect("should have stored value at contract key");
+
+    let contract = stored_contract
+        .as_contract()
+        .expect("stored value should be contract");
+
+    let contract_named_keys = contract.named_keys();
+
+    let contract_purse = contract_named_keys
+        .get(&purse_name)
+        .expect("purse_name key should exist")
+        .into_uref()
+        .expect("should be a uref");
+
+    // Create a mock bid with a vesting schedule initialized.
+    // This is only there to make sure size constraints are not a problem
+    // when trying to read this relatively large structure as a guest.
+    let mut mock_bid = DelegatorBid::locked(
+        DelegatorKind::Purse(contract_purse.addr()),
+        U512::from(100_000_000),
+        contract_purse,
+        validator_pk.clone(),
+        0,
+    );
+
+    mock_bid
+        .vesting_schedule_mut()
+        .unwrap()
+        .initialize_with_schedule(U512::from(100_000_000), 0);
+
+    let delegation_key = Key::BidAddr(BidAddr::DelegatedPurse {
+        validator: validator_pk.to_account_hash(),
+        delegator: contract_purse.addr(),
+    });
+
+    builder.write_data_and_commit(
+        [(
+            delegation_key,
+            StoredValue::BidKind(BidKind::Delegator(Box::new(mock_bid))),
+        )]
+        .iter()
+        .cloned(),
+    );
+
+    builder
+        .query(None, delegation_key, &[])
+        .expect("should have delegation bid")
+        .as_bid_kind()
+        .expect("should be bidkind")
+        .vesting_schedule()
+        .expect("should have vesting schedule")
+        .locked_amounts()
+        .expect("should have locked amounts");
+
+    builder
+        .exec(
+            ExecuteRequestBuilder::contract_call_by_name(
+                account,
+                &contract_name,
+                &entry_point_name,
+                runtime_args! {
+                    ARG_ACTION => get_staked_amount.clone(),
+                    ARG_VALIDATOR => validator_pk.clone(),
+                },
+            )
+            .build(),
+        )
+        .commit()
+        .expect_success();
 }
