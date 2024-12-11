@@ -201,7 +201,7 @@ pub trait Auction:
         let validator_bid_addr = BidAddr::from(public_key.clone());
         let validator_bid_key = validator_bid_addr.into();
         let mut validator_bid = read_validator_bid(self, &validator_bid_key)?;
-        let initial_amount = validator_bid.staked_amount();
+        let staked_amount = validator_bid.staked_amount();
 
         // An attempt to unbond more than is staked results in unbonding the staked amount.
         let unbonding_amount = U512::min(amount, validator_bid.staked_amount());
@@ -210,20 +210,20 @@ pub trait Auction:
         let updated_stake =
             validator_bid.decrease_stake(unbonding_amount, era_end_timestamp_millis)?;
 
-        detail::create_unbonding_purse(
-            self,
-            public_key.clone(),
-            UnbondKind::Validator(public_key.clone()), // validator is the unbonder
-            *validator_bid.bonding_purse(),
-            unbonding_amount,
-            None,
-        )?;
-
         debug!(
-            "withdrawing bid for {} reducing {} by {} to {}",
-            validator_bid_addr, initial_amount, unbonding_amount, updated_stake
+            "withdrawing bid for {validator_bid_addr} reducing {staked_amount} by {unbonding_amount} to {updated_stake}",
         );
+        // if validator stake is less than minimum_bid_amount, unbond fully and prune validator bid
         if updated_stake < U512::from(minimum_bid_amount) {
+            // create unbonding purse for full validator stake
+            detail::create_unbonding_purse(
+                self,
+                public_key.clone(),
+                UnbondKind::Validator(public_key.clone()), // validator is the unbonder
+                *validator_bid.bonding_purse(),
+                staked_amount,
+                None,
+            )?;
             // Unbond all delegators and zero them out
             let delegators = read_delegator_bids(self, &public_key)?;
             for mut delegator in delegators {
@@ -245,6 +245,15 @@ pub trait Auction:
             debug!("pruning validator bid {}", validator_bid_addr);
             self.prune_bid(validator_bid_addr);
         } else {
+            // create unbonding purse for the unbonding amount
+            detail::create_unbonding_purse(
+                self,
+                public_key.clone(),
+                UnbondKind::Validator(public_key.clone()), // validator is the unbonder
+                *validator_bid.bonding_purse(),
+                unbonding_amount,
+                None,
+            )?;
             self.write_bid(validator_bid_key, BidKind::Validator(validator_bid))?;
         }
 

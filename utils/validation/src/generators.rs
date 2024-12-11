@@ -18,10 +18,10 @@ use casper_types::{
         mint::BalanceHoldAddr,
     },
     AccessRights, AddressableEntityHash, BlockTime, ByteCode, ByteCodeHash, ByteCodeKind, CLType,
-    CLTyped, CLValue, DeployHash, DeployInfo, EntityVersionKey, EntityVersions, EntryPoint,
-    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPointValue, EraId, Group, Groups,
-    Key, Package, PackageHash, PackageStatus, Parameter, ProtocolVersion, PublicKey, SecretKey,
-    StoredValue, TransactionRuntime, TransferAddr, TransferV1, URef, U512,
+    CLTyped, CLValue, ContractRuntimeTag, DeployHash, DeployInfo, EntityVersionKey, EntityVersions,
+    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPointValue, EraId, Group,
+    Groups, Key, Package, PackageHash, PackageStatus, Parameter, ProtocolVersion, PublicKey,
+    SecretKey, StoredValue, TransferAddr, TransferV1, URef, U512,
 };
 use casper_validation::{
     abi::{ABIFixture, ABITestCase},
@@ -395,7 +395,7 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
             URef::default(),
             AssociatedKeys::default(),
             ActionThresholds::default(),
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         );
         stored_value.insert(
             "AddressableEntity".to_string(),

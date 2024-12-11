@@ -19,7 +19,8 @@ use casper_types::{
         auction::{self, BidAddr, DelegationRate},
         standard_payment,
     },
-    ApiError, GenesisAccount, GenesisValidator, Key, Motes, StoredValue, U512,
+    ApiError, GenesisAccount, GenesisValidator, Key, Motes, StoredValue,
+    DEFAULT_MINIMUM_BID_AMOUNT, U512,
 };
 
 use crate::lmdb_fixture;
@@ -188,7 +189,7 @@ fn should_immediatelly_unbond_genesis_validator_with_zero_day_vesting_schedule()
         auction::METHOD_ADD_BID,
         runtime_args! {
             auction::ARG_PUBLIC_KEY => DEFAULT_ACCOUNT_PUBLIC_KEY.clone(),
-            auction::ARG_AMOUNT => U512::from(1u64),
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT),
             auction::ARG_DELEGATION_RATE => 10 as DelegationRate,
         },
     )
@@ -316,7 +317,7 @@ fn should_immediatelly_unbond_genesis_validator_with_zero_day_vesting_schedule_a
         auction::METHOD_ADD_BID,
         runtime_args! {
             auction::ARG_PUBLIC_KEY => DEFAULT_ACCOUNT_PUBLIC_KEY.clone(),
-            auction::ARG_AMOUNT => U512::from(1u64),
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT),
             auction::ARG_DELEGATION_RATE => 10 as DelegationRate,
         },
     )

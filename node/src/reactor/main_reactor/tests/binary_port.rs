@@ -27,11 +27,11 @@ use casper_types::{
     testing::TestRng,
     Account, AddressableEntity, AvailableBlockRange, Block, BlockHash, BlockHeader,
     BlockIdentifier, BlockSynchronizerStatus, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind,
-    CLValue, CLValueDictionary, ChainspecRawBytes, Contract, ContractWasm, ContractWasmHash,
-    DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions, GlobalStateIdentifier, Key,
-    KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers, ProtocolVersion, PublicKey,
-    Rewards, SecretKey, SignedBlock, StoredValue, Transaction, TransactionRuntime, Transfer, URef,
-    U512,
+    CLValue, CLValueDictionary, ChainspecRawBytes, Contract, ContractRuntimeTag, ContractWasm,
+    ContractWasmHash, DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions,
+    GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers,
+    ProtocolVersion, PublicKey, Rewards, SecretKey, SignedBlock, StoredValue, Transaction,
+    Transfer, URef, U512,
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
@@ -315,7 +315,7 @@ fn test_effects(rng: &mut TestRng) -> TestEffects {
             main_purse,
             AssociatedKeys::default(),
             ActionThresholds::default(),
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV1),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1),
         ))),
     ));
     effects.push(TransformV2::new(
@@ -1336,8 +1336,7 @@ fn try_accept_transaction(key: &SecretKey) -> TestCase {
         TransactionV1Builder::new_targeting_invocable_entity_via_alias(
             "Test",
             "call",
-            TransactionRuntime::VmCasperV1,
-            0,
+            casper_types::TransactionRuntimeParams::VmCasperV1,
         )
         .with_secret_key(key)
         .with_chain_name("casper-example")

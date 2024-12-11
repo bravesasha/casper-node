@@ -35,9 +35,9 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys},
     bytesrepr, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr, Key, Package,
-    PackageHash, PackageStatus, Phase, ProtocolVersion, StoredValue, TransactionInvocationTarget,
-    TransactionRuntime, URef, U512,
+    ByteCodeKind, ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr,
+    Key, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StoredValue,
+    TransactionInvocationTarget, URef, U512,
 };
 use either::Either;
 use install::{InstallContractError, InstallContractRequest, InstallContractResult};
@@ -230,7 +230,7 @@ impl ExecutorV2 {
             main_purse,
             AssociatedKeys::default(),
             ActionThresholds::default(),
-            EntityKind::SmartContract(TransactionRuntime::VmCasperV2),
+            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV2),
         );
 
         tracking_copy.write(
@@ -374,7 +374,7 @@ impl ExecutorV2 {
                         let wasm_key = match addressable_entity.kind() {
                             EntityKind::System(_) => todo!(),
                             EntityKind::Account(_) => todo!(),
-                            EntityKind::SmartContract(TransactionRuntime::VmCasperV1) => {
+                            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV1) => {
                                 // We need to short circuit here to execute v1 contracts with legacy
                                 // execut
 
@@ -398,7 +398,7 @@ impl ExecutorV2 {
                                     gas_limit,
                                 );
                             }
-                            EntityKind::SmartContract(TransactionRuntime::VmCasperV2) => {
+                            EntityKind::SmartContract(ContractRuntimeTag::VmCasperV2) => {
                                 Key::ByteCode(ByteCodeAddr::V2CasperWasm(
                                     addressable_entity.byte_code_addr(),
                                 ))
