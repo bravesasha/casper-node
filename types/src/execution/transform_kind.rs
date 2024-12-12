@@ -196,9 +196,9 @@ impl TransformKindV2 {
                     let found = "RawBytes".to_string();
                     Err(StoredValueTypeMismatch::new(expected, found).into())
                 }
-                StoredValue::Prepaid(_) => {
+                StoredValue::Prepayment(_) => {
                     let expected = "Contract or Account".to_string();
-                    let found = "Reservation".to_string();
+                    let found = "Prepayment".to_string();
                     Err(StoredValueTypeMismatch::new(expected, found).into())
                 }
                 StoredValue::EntryPoint(_) => {

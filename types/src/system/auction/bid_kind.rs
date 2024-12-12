@@ -1,10 +1,9 @@
 use crate::{
-    bytesrepr,
-    bytesrepr::{FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
+    bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
     system::auction::{
         bid::VestingSchedule, Bid, BidAddr, DelegatorBid, ValidatorBid, ValidatorCredit,
     },
-    EraId, PublicKey, URef, U512,
+    CLType, CLTyped, EraId, PublicKey, URef, U512,
 };
 
 use crate::system::auction::{
@@ -329,6 +328,12 @@ impl BidKind {
             | BidKind::Reservation(_)
             | BidKind::Unbond(_) => None,
         }
+    }
+}
+
+impl CLTyped for BidKind {
+    fn cl_type() -> CLType {
+        CLType::Any
     }
 }
 
