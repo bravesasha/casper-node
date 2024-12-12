@@ -152,7 +152,7 @@ fn main() {
     let wasm_bytes = load_wasm_file(&args.wasm_file);
 
     if let Some(ref func_name) = args.invoke {
-        let (result, info) = run_wasm(wasm_bytes, &args, &chainspec_config, &func_name);
+        let (result, info) = run_wasm(wasm_bytes, &args, &chainspec_config, func_name);
 
         println!("result: {:?}", result);
         println!("elapsed: {:?}", info.elapsed);
