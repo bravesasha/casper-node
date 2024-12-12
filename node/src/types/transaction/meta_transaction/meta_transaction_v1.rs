@@ -319,6 +319,12 @@ impl MetaTransactionV1 {
                         expected: expected_runtime,
                     });
                 }
+
+                if !self.args.is_named() {
+                    // VmCasperV1 runtime expected named arguments and does not support bytes
+                    // variant.
+                    return Err(InvalidTransactionV1::ExpectedNamedArguments);
+                }
             }
             Some(expected_runtime @ ContractRuntimeTag::VmCasperV2) => {
                 if !transaction_config.runtime_config.vm_casper_v2 {
@@ -330,6 +336,27 @@ impl MetaTransactionV1 {
                     return Err(InvalidTransactionV1::InvalidTransactionRuntime {
                         expected: expected_runtime,
                     });
+                }
+
+                if !self.args.is_bytesrepr() {
+                    // VmCasperV2 runtime expected bytes arguments and does not support named
+                    // variant.
+                    return Err(InvalidTransactionV1::ExpectedBytesArguments);
+                }
+
+                match self.pricing_mode {
+                    PricingMode::PaymentLimited {
+                        standard_payment, ..
+                    } => {
+                        if !standard_payment {
+                            // V2 runtime expects standard payment in the payment limited mode.
+                            return Err(InvalidTransactionV1::InvalidPricingMode {
+                                price_mode: self.pricing_mode.clone(),
+                            });
+                        }
+                    }
+                    PricingMode::Fixed { .. } => {}
+                    PricingMode::Prepaid { .. } => {}
                 }
             }
             None => {

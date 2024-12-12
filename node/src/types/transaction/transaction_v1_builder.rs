@@ -502,6 +502,15 @@ impl<'a> TransactionV1Builder<'a> {
         self
     }
 
+    /// Sets the transaction args in the transaction.
+    ///
+    /// NOTE: this overwrites any existing transaction_args args.
+    #[cfg(test)]
+    pub fn with_transaction_args(mut self, args: TransactionArgs) -> Self {
+        self.args = args;
+        self
+    }
+
     /// Returns the new transaction, or an error if non-defaulted fields were not set.
     ///
     /// For more info, see [the `TransactionBuilder` documentation](TransactionV1Builder).
