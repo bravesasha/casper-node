@@ -130,7 +130,7 @@ pub use chainspec::{
     HostFunctionCost, HostFunctionCosts, LegacyRequiredFinality, MessageLimits, MintCosts,
     NetworkConfig, NextUpgrade, OpcodeCosts, PricingHandling, ProtocolConfig,
     ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts, StorageCosts, SystemConfig,
-    TransactionConfig, TransactionLimitsDefinition, TransactionV1Config, VacancyConfig,
+    TransactionConfig, TransactionLanesDefinition, TransactionV1Config, VacancyConfig,
     ValidatorConfig, WasmConfig, WasmV1Config, DEFAULT_GAS_HOLD_INTERVAL,
     DEFAULT_HOST_FUNCTION_NEW_DICTIONARY, DEFAULT_MINIMUM_BID_AMOUNT, DEFAULT_REFUND_HANDLING,
 };
@@ -216,11 +216,11 @@ pub const AUCTION_LANE_ID: u8 = 1;
 /// The lane identifier for the install/upgrade auction interaction.
 pub const INSTALL_UPGRADE_LANE_ID: u8 = 2;
 /// The lane identifier for large wasms.
-pub const LARGE_WASM_LANE_ID: u8 = 3;
+pub(crate) const LARGE_WASM_LANE_ID: u8 = 3;
 /// The lane identifier for medium wasms.
-pub const MEDIUM_WASM_LANE_ID: u8 = 4;
+pub(crate) const MEDIUM_WASM_LANE_ID: u8 = 4;
 /// The lane identifier for small wasms.
-pub const SMALL_WASM_LANE_ID: u8 = 5;
+pub(crate) const SMALL_WASM_LANE_ID: u8 = 5;
 
 /// OS page size.
 #[cfg(feature = "std")]

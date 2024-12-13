@@ -9,7 +9,7 @@ use casper_types::{
     BlockSignatures, BlockSignaturesV2, Chainspec, ChainspecRawBytes, Deploy, ExecutableDeployItem,
     FinalitySignatureV2, RuntimeArgs, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
     TransactionHash, TransactionId, TransactionV1, TransactionV1Config, AUCTION_LANE_ID,
-    INSTALL_UPGRADE_LANE_ID, LARGE_WASM_LANE_ID, MINT_LANE_ID, U512,
+    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID, U512,
 };
 
 use crate::{
@@ -152,7 +152,7 @@ pub(super) fn new_proposed_block_with_cited_signatures(
             INSTALL_UPGRADE_LANE_ID,
             install_upgrade.into_iter().collect(),
         );
-        ret.insert(LARGE_WASM_LANE_ID, standard.into_iter().collect());
+        ret.insert(3, standard.into_iter().collect());
         ret
     };
     let block_payload = BlockPayload::new(transactions, vec![], cited_signatures, true, 1u8);

@@ -5,8 +5,8 @@ use rand::{seq::SliceRandom, Rng};
 
 use casper_types::{
     testing::TestRng, Deploy, EraId, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
-    TransactionConfig, TransactionLimitsDefinition, TransactionV1Config,
-    DEFAULT_LARGE_TRANSACTION_GAS_LIMIT, LARGE_WASM_LANE_ID,
+    TransactionConfig, TransactionLanesDefinition, TransactionV1Config,
+    DEFAULT_LARGE_TRANSACTION_GAS_LIMIT,
 };
 
 use super::*;
@@ -17,6 +17,7 @@ use crate::{
     utils,
 };
 
+const LARGE_WASM_LANE_ID: u8 = 3;
 const ERA_ONE: EraId = EraId::new(1u64);
 const GAS_PRICE_TOLERANCE: u8 = 1;
 const DEFAULT_MINIMUM_GAS_PRICE: u8 = 1;
@@ -1121,10 +1122,11 @@ fn make_test_chainspec(max_standard_count: u64, max_mint_count: u64) -> Arc<Chai
     ];
     let mut transaction_v1_config = TransactionV1Config::default();
     transaction_v1_config.native_mint_lane =
-        TransactionLimitsDefinition::try_from(vec![0, 1024, 1024, 65_000_000_000, max_mint_count])
+        TransactionLanesDefinition::try_from(vec![0, 1024, 1024, 65_000_000_000, max_mint_count])
             .unwrap();
-    transaction_v1_config.wasm_lanes =
-        vec![TransactionLimitsDefinition::try_from(large_lane).unwrap()];
+    transaction_v1_config.set_wasm_lanes(vec![
+        TransactionLanesDefinition::try_from(large_lane).unwrap()
+    ]);
 
     let transaction_config = TransactionConfig {
         transaction_v1_config,

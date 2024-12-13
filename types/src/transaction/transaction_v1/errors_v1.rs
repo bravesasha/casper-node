@@ -202,6 +202,8 @@ pub enum InvalidTransaction {
     },
     /// The transaction is missing a seed field.
     MissingSeed,
+    // Pricing mode not implemented yet
+    PricingModeNotSupported,
 }
 
 impl Display for InvalidTransaction {
@@ -394,8 +396,9 @@ impl Display for InvalidTransaction {
             InvalidTransaction::MissingSeed => {
                 write!(formatter, "missing seed for install or upgrade")
             }
-
-
+            InvalidTransaction::PricingModeNotSupported => {
+                write!(formatter, "Pricing mode not supported")
+            }
         }
     }
 }
@@ -447,7 +450,8 @@ impl StdError for InvalidTransaction {
             InvalidTransaction::ExpectedNamedArguments
             | InvalidTransaction::ExpectedBytesArguments
             | InvalidTransaction::InvalidTransactionRuntime { .. }
-            | InvalidTransaction::MissingSeed => None,
+            | InvalidTransaction::MissingSeed
+            | InvalidTransaction::PricingModeNotSupported => None,
         }
     }
 }

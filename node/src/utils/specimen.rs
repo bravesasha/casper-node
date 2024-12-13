@@ -28,8 +28,7 @@ use casper_types::{
     ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey, SemVer, SignedBlockHeader,
     SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
     TransactionId, TransactionRuntimeParams, TransactionV1, TransactionV1Hash, URef,
-    AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, LARGE_WASM_LANE_ID, MINT_LANE_ID,
-    U512,
+    AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, MINT_LANE_ID, U512,
 };
 
 use crate::{
@@ -859,7 +858,7 @@ impl LargestSpecimen for BlockPayload {
             ],
         );
         transactions.insert(
-            LARGE_WASM_LANE_ID,
+            3,
             vec![
                 large_txn_hash_with_approvals.clone();
                 estimator.parameter::<usize>("max_standard_transactions_per_block")

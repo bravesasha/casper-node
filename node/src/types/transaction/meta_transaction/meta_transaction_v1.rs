@@ -1,11 +1,12 @@
-use super::transaction_lane::{calculate_transaction_lane, TransactionLane};
+use super::transaction_lane::calculate_transaction_lane;
 use crate::types::transaction::arg_handling;
 use casper_types::{
     bytesrepr::ToBytes, crypto, Approval, Chainspec, ContractRuntimeTag, Digest, DisplayIter, Gas,
     HashAddr, InitiatorAddr, InvalidTransaction, InvalidTransactionV1, PricingHandling,
     PricingMode, TimeDiff, Timestamp, TransactionArgs, TransactionConfig, TransactionEntryPoint,
     TransactionRuntimeParams, TransactionScheduling, TransactionTarget, TransactionV1,
-    TransactionV1ExcessiveSizeError, TransactionV1Hash, U512,
+    TransactionV1Config, TransactionV1ExcessiveSizeError, TransactionV1Hash, AUCTION_LANE_ID,
+    MINT_LANE_ID, U512,
 };
 use core::fmt::{self, Debug, Display, Formatter};
 use datasize::DataSize;
@@ -31,7 +32,7 @@ pub struct MetaTransactionV1 {
     args: TransactionArgs,
     target: TransactionTarget,
     entry_point: TransactionEntryPoint,
-    transaction_lane: TransactionLane,
+    lane_id: u8,
     scheduling: TransactionScheduling,
     approvals: BTreeSet<Approval>,
     serialized_length: usize,
@@ -45,7 +46,7 @@ pub struct MetaTransactionV1 {
 impl MetaTransactionV1 {
     pub fn from_transaction_v1(
         v1: &TransactionV1,
-        transaction_config: &TransactionConfig,
+        transaction_v1_config: &TransactionV1Config,
     ) -> Result<MetaTransactionV1, InvalidTransaction> {
         let args: TransactionArgs = v1.deserialize_field(ARGS_MAP_KEY).map_err(|error| {
             InvalidTransaction::V1(InvalidTransactionV1::CouldNotDeserializeField { error })
@@ -70,16 +71,15 @@ impl MetaTransactionV1 {
 
         let payload_hash = v1.payload_hash()?;
         let serialized_length = v1.serialized_length();
+        let pricing_mode = v1.payload().pricing_mode();
 
         let lane_id = calculate_transaction_lane(
             &entry_point,
             &target,
-            v1.pricing_mode().additional_computation_factor(),
-            transaction_config,
+            pricing_mode,
+            transaction_v1_config,
             serialized_length as u64,
         )?;
-        let transaction_lane =
-            TransactionLane::try_from(lane_id).map_err(Into::<InvalidTransaction>::into)?;
         let has_valid_hash = v1.has_valid_hash();
         let approvals = v1.approvals().clone();
         Ok(MetaTransactionV1::new(
@@ -92,7 +92,7 @@ impl MetaTransactionV1 {
             args,
             target,
             entry_point,
-            transaction_lane,
+            lane_id,
             scheduling,
             serialized_length,
             payload_hash,
@@ -102,11 +102,11 @@ impl MetaTransactionV1 {
     }
 
     fn is_native_mint(&self) -> bool {
-        self.transaction_lane == TransactionLane::Mint
+        self.lane_id == MINT_LANE_ID
     }
 
     fn is_native_auction(&self) -> bool {
-        self.transaction_lane == TransactionLane::Auction
+        self.lane_id == AUCTION_LANE_ID
     }
 
     pub(crate) fn is_v2_wasm(&self) -> bool {
@@ -140,7 +140,7 @@ impl MetaTransactionV1 {
         args: TransactionArgs,
         target: TransactionTarget,
         entry_point: TransactionEntryPoint,
-        transaction_lane: TransactionLane,
+        lane_id: u8,
         scheduling: TransactionScheduling,
         serialized_length: usize,
         payload_hash: Digest,
@@ -157,7 +157,7 @@ impl MetaTransactionV1 {
             args,
             target,
             entry_point,
-            transaction_lane,
+            lane_id,
             scheduling,
             approvals,
             serialized_length,
@@ -236,8 +236,8 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the transaction lane.
-    pub fn transaction_lane(&self) -> u8 {
-        self.transaction_lane as u8
+    pub fn lane_id(&self) -> u8 {
+        self.lane_id
     }
 
     /// Returns payload hash of the transaction.
@@ -367,7 +367,7 @@ impl MetaTransactionV1 {
         self.is_valid_size(
             transaction_config
                 .transaction_v1_config
-                .get_max_serialized_length(self.transaction_lane as u8) as u32,
+                .get_max_serialized_length(self.lane_id) as u32,
         )?;
 
         let chain_name = chainspec.network_config.name.clone();
@@ -382,7 +382,7 @@ impl MetaTransactionV1 {
                 initiator_addr= %self.initiator_addr,
                 target= %self.target,
                 entry_point= %self.entry_point,
-                transaction_lane= %self.transaction_lane,
+                lane_id= %self.lane_id,
                 scheduling= %self.scheduling,
                 "invalid chain identifier"
             );
@@ -451,7 +451,7 @@ impl MetaTransactionV1 {
 
         let gas_limit = self
             .pricing_mode
-            .gas_limit(chainspec, &self.entry_point, self.transaction_lane as u8)
+            .gas_limit(chainspec, &self.entry_point, self.lane_id)
             .map_err(Into::<InvalidTransactionV1>::into)?;
         let block_gas_limit = Gas::new(U512::from(transaction_config.block_gas_limit));
         if gas_limit > block_gas_limit {
@@ -473,7 +473,7 @@ impl MetaTransactionV1 {
         &self,
         config: &TransactionConfig,
     ) -> Result<(), InvalidTransactionV1> {
-        let lane_id = self.transaction_lane as u8;
+        let lane_id = self.lane_id;
         if !config.transaction_v1_config.is_supported(lane_id) {
             return Err(InvalidTransactionV1::InvalidTransactionLane(lane_id));
         }
@@ -667,7 +667,7 @@ impl MetaTransactionV1 {
     /// Returns the gas limit for the transaction.
     pub fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
         self.pricing_mode()
-            .gas_limit(chainspec, self.entry_point(), self.transaction_lane as u8)
+            .gas_limit(chainspec, self.entry_point(), self.lane_id)
             .map_err(Into::into)
     }
 
@@ -713,7 +713,7 @@ impl Display for MetaTransactionV1 {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
-            "meta-transaction-v1[hash: {}, chain_name: {}, timestamp: {}, ttl: {}, pricing_mode: {}, initiator_addr: {}, target: {}, entry_point: {}, transaction_lane: {}, scheduling: {}, approvals: {}]",
+            "meta-transaction-v1[hash: {}, chain_name: {}, timestamp: {}, ttl: {}, pricing_mode: {}, initiator_addr: {}, target: {}, entry_point: {}, lane_id: {}, scheduling: {}, approvals: {}]",
             self.hash,
             self.chain_name,
             self.timestamp,
@@ -722,9 +722,180 @@ impl Display for MetaTransactionV1 {
             self.initiator_addr,
             self.target,
             self.entry_point,
-            self.transaction_lane,
+            self.lane_id,
             self.scheduling,
             DisplayIter::new(self.approvals.iter())
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MetaTransactionV1;
+    use crate::types::transaction::transaction_v1_builder::TransactionV1Builder;
+    use casper_types::{
+        testing::TestRng, InvalidTransaction, InvalidTransactionV1, PricingMode, SecretKey,
+        TransactionInvocationTarget, TransactionLanesDefinition, TransactionRuntimeParams,
+        TransactionV1Config,
+    };
+
+    #[test]
+    fn limited_amount_should_determine_transaction_lane_for_session() {
+        let rng = &mut TestRng::new();
+        let secret_key = SecretKey::random(rng);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: 1001,
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+
+        let transaction_v1 = TransactionV1Builder::new_session(
+            false,
+            vec![1; 30].into(),
+            TransactionRuntimeParams::VmCasperV1,
+        )
+        .with_chain_name("x".to_string())
+        .with_pricing_mode(pricing_mode)
+        .with_secret_key(&secret_key)
+        .build()
+        .unwrap();
+        let config = build_v1_config();
+
+        let meta_transaction = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config)
+            .expect("meta transaction should be valid");
+        assert_eq!(meta_transaction.lane_id(), 4);
+    }
+
+    #[test]
+    fn limited_amount_should_fail_if_does_not_fit_in_any_lane() {
+        let rng = &mut TestRng::new();
+        let secret_key = SecretKey::random(rng);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: 1000000,
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+
+        let transaction_v1 = TransactionV1Builder::new_session(
+            false,
+            vec![1; 30].into(),
+            TransactionRuntimeParams::VmCasperV1,
+        )
+        .with_chain_name("x".to_string())
+        .with_pricing_mode(pricing_mode)
+        .with_secret_key(&secret_key)
+        .build()
+        .unwrap();
+        let config = build_v1_config();
+
+        let res = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config);
+        assert!(matches!(
+            res,
+            Err(InvalidTransaction::V1(
+                InvalidTransactionV1::NoWasmLaneMatchesTransaction()
+            ))
+        ))
+    }
+
+    #[test]
+    fn limited_amount_should_fail_if_transaction_size_does_not_fit_in_any_lane() {
+        let rng = &mut TestRng::new();
+        let secret_key = SecretKey::random(rng);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: 100,
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+
+        let transaction_v1 = TransactionV1Builder::new_session(
+            false,
+            vec![1; 3000].into(),
+            TransactionRuntimeParams::VmCasperV1,
+        )
+        .with_chain_name("x".to_string())
+        .with_pricing_mode(pricing_mode)
+        .with_secret_key(&secret_key)
+        .build()
+        .unwrap();
+        let mut config = TransactionV1Config::default();
+        config.set_wasm_lanes(vec![
+            TransactionLanesDefinition {
+                id: 3,
+                max_transaction_length: 200,
+                max_transaction_args_length: 100,
+                max_transaction_gas_limit: 100,
+                max_transaction_count: 10,
+            },
+            TransactionLanesDefinition {
+                id: 4,
+                max_transaction_length: 500,
+                max_transaction_args_length: 100,
+                max_transaction_gas_limit: 10000,
+                max_transaction_count: 10,
+            },
+        ]);
+
+        let res = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config);
+        assert!(matches!(
+            res,
+            Err(InvalidTransaction::V1(
+                InvalidTransactionV1::NoWasmLaneMatchesTransaction()
+            ))
+        ))
+    }
+
+    #[test]
+    fn limited_amount_should_determine_transaction_lane_for_stored() {
+        let rng = &mut TestRng::new();
+        let secret_key = SecretKey::random(rng);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: 1001,
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+
+        let transaction_v1 = TransactionV1Builder::new_targeting_stored(
+            TransactionInvocationTarget::ByName("xyz".to_string()),
+            "abc",
+            TransactionRuntimeParams::VmCasperV1,
+        )
+        .with_chain_name("x".to_string())
+        .with_secret_key(&secret_key)
+        .with_pricing_mode(pricing_mode)
+        .build()
+        .unwrap();
+        let config = build_v1_config();
+
+        let meta_transaction = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config)
+            .expect("meta transaction should be valid");
+        assert_eq!(meta_transaction.lane_id(), 4);
+    }
+
+    fn build_v1_config() -> TransactionV1Config {
+        let mut config = TransactionV1Config::default();
+        config.set_wasm_lanes(vec![
+            TransactionLanesDefinition {
+                id: 3,
+                max_transaction_length: 10000,
+                max_transaction_args_length: 100,
+                max_transaction_gas_limit: 100,
+                max_transaction_count: 10,
+            },
+            TransactionLanesDefinition {
+                id: 4,
+                max_transaction_length: 10001,
+                max_transaction_args_length: 100,
+                max_transaction_gas_limit: 10000,
+                max_transaction_count: 10,
+            },
+            TransactionLanesDefinition {
+                id: 5,
+                max_transaction_length: 10002,
+                max_transaction_args_length: 100,
+                max_transaction_gas_limit: 1000,
+                max_transaction_count: 10,
+            },
+        ]);
+        config
     }
 }

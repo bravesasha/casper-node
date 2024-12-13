@@ -404,7 +404,7 @@ impl TransactionAcceptor {
         block_header: Box<BlockHeader>,
     ) -> Effects<Event> {
         let session = match &event_metadata.meta_transaction {
-            MetaTransaction::Deploy(deploy) => deploy.session(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.session(),
             MetaTransaction::V1(txn) => {
                 error!(%txn, "should only handle deploys in verify_deploy_session");
                 return self.reject_transaction(
@@ -510,9 +510,10 @@ impl TransactionAcceptor {
         }
 
         let next_step = match &event_metadata.meta_transaction {
-            MetaTransaction::Deploy(deploy) => {
+            MetaTransaction::Deploy(meta_deploy) => {
+                let deploy_hash = meta_deploy.deploy().hash();
                 error!(
-                    %deploy,
+                    %deploy_hash,
                     "should only handle version 1 transactions in verify_transaction_v1_body"
                 );
                 return self.reject_transaction(
@@ -594,12 +595,20 @@ impl TransactionAcceptor {
         };
 
         let maybe_entry_point_name = match &event_metadata.meta_transaction {
-            MetaTransaction::Deploy(deploy) if is_payment => {
-                Some(deploy.payment().entry_point_name().to_string())
-            }
-            MetaTransaction::Deploy(deploy) => {
-                Some(deploy.session().entry_point_name().to_string())
-            }
+            MetaTransaction::Deploy(meta_deploy) if is_payment => Some(
+                meta_deploy
+                    .deploy()
+                    .payment()
+                    .entry_point_name()
+                    .to_string(),
+            ),
+            MetaTransaction::Deploy(meta_deploy) => Some(
+                meta_deploy
+                    .deploy()
+                    .session()
+                    .entry_point_name()
+                    .to_string(),
+            ),
             MetaTransaction::V1(_) if is_payment => {
                 error!("should not fetch a contract to validate payment logic for transaction v1s");
                 None
@@ -764,7 +773,8 @@ impl TransactionAcceptor {
         event_metadata: Box<EventMetadata>,
     ) -> Effects<Event> {
         let is_valid = match &event_metadata.meta_transaction {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .is_valid()
                 .map_err(|err| Error::InvalidTransaction(err.into())),
             MetaTransaction::V1(txn) => txn

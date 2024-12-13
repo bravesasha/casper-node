@@ -10,12 +10,12 @@ use casper_types::{
     runtime_args,
     system::mint::{ARG_AMOUNT, ARG_TARGET},
     AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionRuntimeParams,
-    LARGE_WASM_LANE_ID,
 };
 use once_cell::sync::Lazy;
 
 use casper_types::{bytesrepr::Bytes, execution::ExecutionResultV1};
 
+const LARGE_WASM_LANE_ID: u8 = 3;
 static ALICE_SECRET_KEY: Lazy<Arc<SecretKey>> = Lazy::new(|| {
     Arc::new(SecretKey::ed25519_from_bytes([0xAA; SecretKey::ED25519_LENGTH]).unwrap())
 });
