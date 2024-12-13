@@ -904,7 +904,7 @@ mod tests {
             let transfer_count = fixture.rng.gen_range(0..10);
             let auction_count = fixture.rng.gen_range(0..20);
             let install_upgrade_count = fixture.rng.gen_range(0..2);
-            let standard_count = fixture.rng.gen_range(0..3);
+            let standard_count = fixture.rng.gen_range(0..2);
             // Ensure at least one transaction is generated. Otherwise the state will be Valid.
             if transfer_count + auction_count + install_upgrade_count + standard_count > 0 {
                 break (
