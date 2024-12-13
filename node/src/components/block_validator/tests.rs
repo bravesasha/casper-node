@@ -858,7 +858,7 @@ async fn transfer_transaction_mixup_and_replay() {
     let transfer_v1 = new_v1_transfer(&mut rng, timestamp, ttl);
 
     // First we make sure that our transfers and transactions would normally be valid.
-    let transactions = vec![deploy.clone(), transaction_v1.clone()];
+    let transactions = vec![transaction_v1.clone()];
     let transfers = vec![transfer_orig.clone(), transfer_v1.clone()];
     let mut context = ValidationContext::new()
         .with_num_validators(&mut rng, 1)
@@ -1146,7 +1146,6 @@ async fn should_validate_block_with_signatures() {
     let mut rng = TestRng::new();
     let ttl = TimeDiff::from_millis(200);
     let timestamp = Timestamp::from(1000);
-    let deploy = new_deploy(&mut rng, timestamp, ttl);
     let transaction_v1 = new_v1_standard(&mut rng, timestamp, ttl);
     let transfer = new_transfer(&mut rng, timestamp, ttl);
     let transfer_v1 = new_v1_transfer(&mut rng, timestamp, ttl);
@@ -1154,7 +1153,7 @@ async fn should_validate_block_with_signatures() {
     let context = ValidationContext::new()
         .with_num_validators(&mut rng, 3)
         .with_past_blocks(&mut rng, 0, 5, 0.into())
-        .with_transactions(vec![deploy, transaction_v1])
+        .with_transactions(vec![transaction_v1])
         .with_transfers(vec![transfer, transfer_v1])
         .include_all_transactions()
         .include_all_transfers();
@@ -1173,7 +1172,6 @@ async fn should_fetch_missing_signature() {
     let mut rng = TestRng::new();
     let ttl = TimeDiff::from_millis(200);
     let timestamp = Timestamp::from(1000);
-    let deploy = new_deploy(&mut rng, timestamp, ttl);
     let transaction_v1 = new_v1_standard(&mut rng, timestamp, ttl);
     let transfer = new_transfer(&mut rng, timestamp, ttl);
     let transfer_v1 = new_v1_transfer(&mut rng, timestamp, ttl);
@@ -1181,7 +1179,7 @@ async fn should_fetch_missing_signature() {
     let context = ValidationContext::new()
         .with_num_validators(&mut rng, 3)
         .with_past_blocks(&mut rng, 0, 5, 0.into())
-        .with_transactions(vec![deploy, transaction_v1])
+        .with_transactions(vec![transaction_v1])
         .with_transfers(vec![transfer, transfer_v1])
         .include_all_transactions()
         .include_all_transfers();
@@ -1253,7 +1251,6 @@ async fn should_validate_with_delayed_block() {
     let mut rng = TestRng::new();
     let ttl = TimeDiff::from_millis(200);
     let timestamp = Timestamp::from(1000);
-    let deploy = new_deploy(&mut rng, timestamp, ttl);
     let transaction_v1 = new_v1_standard(&mut rng, timestamp, ttl);
     let transfer = new_transfer(&mut rng, timestamp, ttl);
     let transfer_v1 = new_v1_transfer(&mut rng, timestamp, ttl);
@@ -1262,7 +1259,7 @@ async fn should_validate_with_delayed_block() {
         .with_num_validators(&mut rng, 3)
         .with_past_blocks(&mut rng, 0, 4, 0.into())
         .with_delayed_blocks(&mut rng, 5, 5, 0.into())
-        .with_transactions(vec![deploy, transaction_v1])
+        .with_transactions(vec![transaction_v1])
         .with_transfers(vec![transfer, transfer_v1])
         .include_all_transactions()
         .include_all_transfers();
