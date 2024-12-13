@@ -38,7 +38,8 @@ use casper_types::{
     Block, BlockV2, CLValue, Chainspec, ChainspecRawBytes, Contract, Deploy, EraId, HashAddr,
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Package, PricingHandling, PricingMode,
     ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp,
-    Transaction, TransactionConfig, TransactionRuntimeParams, TransactionV1, URef, U512,
+    Transaction, TransactionArgs, TransactionConfig, TransactionRuntimeParams, TransactionV1, URef,
+    U512,
 };
 
 use super::*;
@@ -216,6 +217,7 @@ enum TestScenario {
     TooLowGasPriceToleranceForDeploy,
     InvalidFields,
     InvalidFieldsFromPeer,
+    InvalidArgumentsKind,
 }
 
 impl TestScenario {
@@ -260,7 +262,8 @@ impl TestScenario {
             | TestScenario::InvalidPricingModeForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForDeploy
-            | TestScenario::InvalidFields => Source::Client,
+            | TestScenario::InvalidFields
+            | TestScenario::InvalidArgumentsKind => Source::Client,
         }
     }
 
@@ -623,6 +626,25 @@ impl TestScenario {
                 .unwrap();
                 Transaction::from(txn)
             }
+            TestScenario::InvalidArgumentsKind => {
+                let timestamp = Timestamp::now()
+                    + Config::default().timestamp_leeway
+                    + TimeDiff::from_millis(100);
+                let ttl = TimeDiff::from_seconds(300);
+                let txn = TransactionV1Builder::new_session(
+                    false,
+                    Bytes::from(vec![1]),
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_transaction_args(TransactionArgs::Bytesrepr(Bytes::from(vec![1, 2, 3])))
+                .with_chain_name("casper-example")
+                .with_timestamp(timestamp)
+                .with_ttl(ttl)
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
         }
     }
 
@@ -681,6 +703,7 @@ impl TestScenario {
             TestScenario::TooLowGasPriceToleranceForDeploy => false,
             TestScenario::InvalidFields => false,
             TestScenario::InvalidFieldsFromPeer => false,
+            TestScenario::InvalidArgumentsKind => false,
         }
     }
 
@@ -1240,7 +1263,8 @@ async fn run_transaction_acceptor_without_timeout(
             | TestScenario::FromClientExpired(_)
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForDeploy
-            | TestScenario::InvalidFields => {
+            | TestScenario::InvalidFields
+            | TestScenario::InvalidArgumentsKind => {
                 matches!(
                     event,
                     Event::TransactionAcceptorAnnouncement(
@@ -2510,4 +2534,15 @@ async fn should_reject_transaction_from_peer_with_unexpected_fields() {
             InvalidTransactionV1::UnexpectedTransactionFieldEntries
         )))
     ))
+}
+
+#[tokio::test]
+async fn should_reject_transaction_with_invalid_transaction_args() {
+    let result = run_transaction_acceptor(TestScenario::InvalidArgumentsKind).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::ExpectedNamedArguments
+        )))
+    ));
 }
