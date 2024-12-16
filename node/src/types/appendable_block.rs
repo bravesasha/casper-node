@@ -176,7 +176,7 @@ impl AppendableBlock {
         for lane_id in self
             .transaction_config
             .transaction_v1_config
-            .wasm_lanes
+            .wasm_lanes()
             .iter()
             .map(|lane| lane.id())
         {
@@ -247,9 +247,9 @@ impl Display for AppendableBlock {
 
 #[cfg(test)]
 mod tests {
-    use casper_types::{
-        testing::TestRng, SingleBlockRewardedSignatures, TimeDiff, LARGE_WASM_LANE_ID,
-    };
+    use casper_types::{testing::TestRng, SingleBlockRewardedSignatures, TimeDiff};
+
+    use crate::testing::LARGE_WASM_LANE_ID;
 
     use super::*;
     use std::collections::HashSet;

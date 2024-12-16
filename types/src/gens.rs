@@ -1293,11 +1293,6 @@ pub fn pricing_mode_arb() -> impl Strategy<Value = PricingMode> {
             }
         ),
         fixed_pricing_mode_arb(),
-        u8_slice_32().prop_map(|receipt| {
-            PricingMode::Prepaid {
-                receipt: receipt.into(),
-            }
-        }),
     ]
 }
 

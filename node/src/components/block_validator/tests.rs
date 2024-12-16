@@ -9,7 +9,7 @@ use casper_types::{
     BlockSignatures, BlockSignaturesV2, Chainspec, ChainspecRawBytes, Deploy, ExecutableDeployItem,
     FinalitySignatureV2, RuntimeArgs, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
     TransactionHash, TransactionId, TransactionV1, TransactionV1Config, AUCTION_LANE_ID,
-    INSTALL_UPGRADE_LANE_ID, LARGE_WASM_LANE_ID, MINT_LANE_ID, U512,
+    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID, U512,
 };
 
 use crate::{
@@ -19,6 +19,7 @@ use crate::{
     },
     effect::requests::StorageRequest,
     reactor::{EventQueueHandle, QueueKind, Scheduler},
+    testing::LARGE_WASM_LANE_ID,
     types::{BlockPayload, ValidatorMatrix},
     utils::{self, Loadable},
 };

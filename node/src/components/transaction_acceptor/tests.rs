@@ -1163,7 +1163,6 @@ async fn run_transaction_acceptor_without_timeout(
     } else {
         chainspec
     };
-
     chainspec.core_config.administrators = iter::once(PublicKey::from(&admin)).collect();
 
     let chainspec = Arc::new(chainspec);

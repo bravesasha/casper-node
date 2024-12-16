@@ -248,7 +248,7 @@ impl TestBlockV2Builder {
 
 // A simplified way of calculating transaction lanes. It doesn't take
 // into consideration the size of the transaction against the chainspec
-// and doesn't take `additional_compufsdetation_factor` into consideration.
+// and doesn't take `additional_computation_factor` into consideration.
 // This is only used for tests purposes.
 fn simplified_calculate_transaction_lane_from_values(
     entry_point: &TransactionEntryPoint,

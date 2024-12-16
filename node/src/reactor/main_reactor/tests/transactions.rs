@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::MetaTransaction;
+use crate::{testing::LARGE_WASM_LANE_ID, types::MetaTransaction};
 use casper_execution_engine::engine_state::MAX_PAYMENT_AMOUNT;
 use casper_storage::data_access_layer::{
     AddressableEntityRequest, BalanceIdentifier, ProofHandling, QueryRequest, QueryResult,
@@ -10,7 +10,6 @@ use casper_types::{
     runtime_args,
     system::mint::{ARG_AMOUNT, ARG_TARGET},
     AddressableEntity, Digest, EntityAddr, ExecutionInfo, TransactionRuntimeParams,
-    LARGE_WASM_LANE_ID,
 };
 use once_cell::sync::Lazy;
 

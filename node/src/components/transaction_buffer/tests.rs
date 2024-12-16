@@ -3,18 +3,18 @@ use std::iter;
 use prometheus::Registry;
 use rand::{seq::SliceRandom, Rng};
 
-use casper_types::{
-    testing::TestRng, Deploy, EraId, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
-    TransactionConfig, TransactionLimitsDefinition, TransactionV1Config,
-    DEFAULT_LARGE_TRANSACTION_GAS_LIMIT, LARGE_WASM_LANE_ID,
-};
-
 use super::*;
 use crate::{
     effect::announcements::TransactionBufferAnnouncement::{self, TransactionsExpired},
     reactor::{EventQueueHandle, QueueKind, Scheduler},
+    testing::LARGE_WASM_LANE_ID,
     types::{transaction::transaction_v1_builder::TransactionV1Builder, FinalizedBlock},
     utils,
+};
+use casper_types::{
+    testing::TestRng, Deploy, EraId, SecretKey, TestBlockBuilder, TimeDiff, Transaction,
+    TransactionConfig, TransactionLaneDefinition, TransactionV1Config,
+    DEFAULT_LARGE_TRANSACTION_GAS_LIMIT,
 };
 
 const ERA_ONE: EraId = EraId::new(1u64);
@@ -1121,10 +1121,11 @@ fn make_test_chainspec(max_standard_count: u64, max_mint_count: u64) -> Arc<Chai
     ];
     let mut transaction_v1_config = TransactionV1Config::default();
     transaction_v1_config.native_mint_lane =
-        TransactionLimitsDefinition::try_from(vec![0, 1024, 1024, 65_000_000_000, max_mint_count])
+        TransactionLaneDefinition::try_from(vec![0, 1024, 1024, 65_000_000_000, max_mint_count])
             .unwrap();
-    transaction_v1_config.wasm_lanes =
-        vec![TransactionLimitsDefinition::try_from(large_lane).unwrap()];
+    transaction_v1_config.set_wasm_lanes(vec![
+        TransactionLaneDefinition::try_from(large_lane).unwrap()
+    ]);
 
     let transaction_config = TransactionConfig {
         transaction_v1_config,

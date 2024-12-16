@@ -1,15 +1,16 @@
+mod lane_id;
+mod meta_deploy;
 mod meta_transaction_v1;
 mod transaction_header;
-mod transaction_lane;
+use meta_deploy::MetaDeploy;
 pub(crate) use transaction_header::*;
 
 use casper_execution_engine::engine_state::{SessionDataDeploy, SessionDataV1, SessionInputData};
 use casper_types::{
-    account::AccountHash, bytesrepr::ToBytes, Approval, Chainspec, Deploy, Digest,
-    ExecutableDeployItem, Gas, GasLimited, HashAddr, InitiatorAddr, InvalidTransaction, Phase,
-    PricingMode, TimeDiff, Timestamp, Transaction, TransactionArgs, TransactionConfig,
-    TransactionEntryPoint, TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
-    LARGE_WASM_LANE_ID, MINT_LANE_ID,
+    account::AccountHash, bytesrepr::ToBytes, Approval, Chainspec, Digest, ExecutableDeployItem,
+    Gas, GasLimited, HashAddr, InitiatorAddr, InvalidTransaction, Phase, PricingMode, TimeDiff,
+    Timestamp, Transaction, TransactionArgs, TransactionConfig, TransactionEntryPoint,
+    TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
 };
 use core::fmt::{self, Debug, Display, Formatter};
 pub(crate) use meta_transaction_v1::MetaTransactionV1;
@@ -18,7 +19,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) enum MetaTransaction {
-    Deploy(Deploy),
+    Deploy(MetaDeploy),
     V1(MetaTransactionV1),
 }
 
@@ -26,7 +27,9 @@ impl MetaTransaction {
     /// Returns the `TransactionHash` identifying this transaction.
     pub fn hash(&self) -> TransactionHash {
         match self {
-            MetaTransaction::Deploy(deploy) => TransactionHash::from(*deploy.hash()),
+            MetaTransaction::Deploy(meta_deploy) => {
+                TransactionHash::from(*meta_deploy.deploy().hash())
+            }
             MetaTransaction::V1(txn) => TransactionHash::from(*txn.hash()),
         }
     }
@@ -34,7 +37,7 @@ impl MetaTransaction {
     /// Timestamp.
     pub fn timestamp(&self) -> Timestamp {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.header().timestamp(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().header().timestamp(),
             MetaTransaction::V1(v1) => v1.timestamp(),
         }
     }
@@ -42,7 +45,7 @@ impl MetaTransaction {
     /// Time to live.
     pub fn ttl(&self) -> TimeDiff {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.header().ttl(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().header().ttl(),
             MetaTransaction::V1(v1) => v1.ttl(),
         }
     }
@@ -50,7 +53,7 @@ impl MetaTransaction {
     /// Returns the `Approval`s for this transaction.
     pub fn approvals(&self) -> BTreeSet<Approval> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.approvals().clone(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().approvals().clone(),
             MetaTransaction::V1(v1) => v1.approvals().clone(),
         }
     }
@@ -58,7 +61,9 @@ impl MetaTransaction {
     /// Returns the address of the initiator of the transaction.
     pub fn initiator_addr(&self) -> InitiatorAddr {
         match self {
-            MetaTransaction::Deploy(deploy) => InitiatorAddr::PublicKey(deploy.account().clone()),
+            MetaTransaction::Deploy(meta_deploy) => {
+                InitiatorAddr::PublicKey(meta_deploy.deploy().account().clone())
+            }
             MetaTransaction::V1(txn) => txn.initiator_addr().clone(),
         }
     }
@@ -66,7 +71,8 @@ impl MetaTransaction {
     /// Returns the set of account hashes corresponding to the public keys of the approvals.
     pub fn signers(&self) -> BTreeSet<AccountHash> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .approvals()
                 .iter()
                 .map(|approval| approval.signer().to_account_hash())
@@ -82,7 +88,7 @@ impl MetaTransaction {
     /// Returns `true` if `self` represents a native transfer deploy or a native V1 transaction.
     pub fn is_native(&self) -> bool {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.is_transfer(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().is_transfer(),
             MetaTransaction::V1(v1_txn) => *v1_txn.target() == TransactionTarget::Native,
         }
     }
@@ -90,7 +96,10 @@ impl MetaTransaction {
     /// Should this transaction use standard payment processing?
     pub fn is_standard_payment(&self) -> bool {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.payment().is_standard_payment(Phase::Payment),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
+                .payment()
+                .is_standard_payment(Phase::Payment),
             MetaTransaction::V1(v1) => {
                 if let PricingMode::PaymentLimited {
                     standard_payment, ..
@@ -107,7 +116,8 @@ impl MetaTransaction {
     /// Authorization keys.
     pub fn authorization_keys(&self) -> BTreeSet<AccountHash> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .approvals()
                 .iter()
                 .map(|approval| approval.signer().to_account_hash())
@@ -123,9 +133,9 @@ impl MetaTransaction {
     /// The session args.
     pub fn session_args(&self) -> Cow<TransactionArgs> {
         match self {
-            MetaTransaction::Deploy(deploy) => {
-                Cow::Owned(TransactionArgs::Named(deploy.session().args().clone()))
-            }
+            MetaTransaction::Deploy(meta_deploy) => Cow::Owned(TransactionArgs::Named(
+                meta_deploy.deploy().session().args().clone(),
+            )),
             MetaTransaction::V1(transaction_v1) => Cow::Borrowed(transaction_v1.args()),
         }
     }
@@ -133,7 +143,9 @@ impl MetaTransaction {
     /// The entry point.
     pub fn entry_point(&self) -> TransactionEntryPoint {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.session().entry_point_name().into(),
+            MetaTransaction::Deploy(meta_deploy) => {
+                meta_deploy.deploy().session().entry_point_name().into()
+            }
             MetaTransaction::V1(transaction_v1) => transaction_v1.entry_point().clone(),
         }
     }
@@ -141,21 +153,16 @@ impl MetaTransaction {
     /// The transaction lane.
     pub fn transaction_lane(&self) -> u8 {
         match self {
-            MetaTransaction::Deploy(deploy) => {
-                if deploy.is_transfer() {
-                    MINT_LANE_ID
-                } else {
-                    LARGE_WASM_LANE_ID
-                }
-            }
-            MetaTransaction::V1(v1) => v1.transaction_lane(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.lane_id(),
+            MetaTransaction::V1(v1) => v1.lane_id(),
         }
     }
 
     /// Returns the gas price tolerance.
     pub fn gas_price_tolerance(&self) -> Result<u8, InvalidTransaction> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .gas_price_tolerance()
                 .map_err(InvalidTransaction::from),
             MetaTransaction::V1(v1) => Ok(v1.gas_price_tolerance()),
@@ -164,7 +171,8 @@ impl MetaTransaction {
 
     pub fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .gas_limit(chainspec)
                 .map_err(InvalidTransaction::from),
             MetaTransaction::V1(v1) => v1.gas_limit(chainspec),
@@ -187,10 +195,10 @@ impl MetaTransaction {
     /// Returns a `hash_addr` for a targeted contract, if known.
     pub fn contract_direct_address(&self) -> Option<(HashAddr, String)> {
         match self {
-            MetaTransaction::Deploy(deploy) => {
+            MetaTransaction::Deploy(meta_deploy) => {
                 if let ExecutableDeployItem::StoredContractByHash {
                     hash, entry_point, ..
-                } = deploy.session()
+                } = meta_deploy.session()
                 {
                     return Some((hash.value(), entry_point.clone()));
                 }
@@ -208,9 +216,15 @@ impl MetaTransaction {
         transaction_config: &TransactionConfig,
     ) -> Result<Self, InvalidTransaction> {
         match transaction {
-            Transaction::Deploy(deploy) => Ok(MetaTransaction::Deploy(deploy.clone())),
-            Transaction::V1(v1) => MetaTransactionV1::from_transaction_v1(v1, transaction_config)
-                .map(MetaTransaction::V1),
+            Transaction::Deploy(deploy) => {
+                MetaDeploy::from_deploy(deploy.clone(), &transaction_config.transaction_v1_config)
+                    .map(MetaTransaction::Deploy)
+            }
+            Transaction::V1(v1) => MetaTransactionV1::from_transaction_v1(
+                v1,
+                &transaction_config.transaction_v1_config,
+            )
+            .map(MetaTransaction::V1),
         }
     }
 
@@ -221,7 +235,8 @@ impl MetaTransaction {
         at: Timestamp,
     ) -> Result<(), InvalidTransaction> {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy
+                .deploy()
                 .is_config_compliant(chainspec, timestamp_leeway, at)
                 .map_err(InvalidTransaction::from),
             MetaTransaction::V1(v1) => v1
@@ -232,7 +247,7 @@ impl MetaTransaction {
 
     pub fn payload_hash(&self) -> Digest {
         match self {
-            MetaTransaction::Deploy(deploy) => *deploy.body_hash(),
+            MetaTransaction::Deploy(meta_deploy) => *meta_deploy.deploy().body_hash(),
             MetaTransaction::V1(v1) => *v1.payload_hash(),
         }
     }
@@ -241,7 +256,8 @@ impl MetaTransaction {
         let initiator_addr = self.initiator_addr();
         let is_standard_payment = self.is_standard_payment();
         match self {
-            MetaTransaction::Deploy(deploy) => {
+            MetaTransaction::Deploy(meta_deploy) => {
+                let deploy = meta_deploy.deploy();
                 let data = SessionDataDeploy::new(
                     deploy.hash(),
                     deploy.session(),
@@ -256,7 +272,7 @@ impl MetaTransaction {
                     v1.args().as_named().expect("V1 wasm args should be named and validated at the transaction acceptor level"),
                     v1.target(),
                     v1.entry_point(),
-                    v1.transaction_lane() == INSTALL_UPGRADE_LANE_ID,
+                    v1.lane_id() == INSTALL_UPGRADE_LANE_ID,
                     v1.hash(),
                     v1.pricing_mode(),
                     initiator_addr,
@@ -271,7 +287,7 @@ impl MetaTransaction {
     /// Size estimate.
     pub fn size_estimate(&self) -> usize {
         match self {
-            MetaTransaction::Deploy(deploy) => deploy.serialized_length(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().serialized_length(),
             MetaTransaction::V1(v1) => v1.serialized_length(),
         }
     }
@@ -294,7 +310,7 @@ impl MetaTransaction {
         match self {
             MetaTransaction::Deploy(_) => false,
             MetaTransaction::V1(meta_transaction_v1) => {
-                meta_transaction_v1.transaction_lane() == INSTALL_UPGRADE_LANE_ID
+                meta_transaction_v1.lane_id() == INSTALL_UPGRADE_LANE_ID
             }
         }
     }
@@ -317,7 +333,7 @@ impl MetaTransaction {
 impl Display for MetaTransaction {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         match self {
-            MetaTransaction::Deploy(deploy) => Display::fmt(deploy, formatter),
+            MetaTransaction::Deploy(meta_deploy) => Display::fmt(meta_deploy.deploy(), formatter),
             MetaTransaction::V1(txn) => Display::fmt(txn, formatter),
         }
     }
@@ -326,13 +342,30 @@ impl Display for MetaTransaction {
 #[cfg(test)]
 mod proptests {
     use super::*;
-    use casper_types::gens::legal_transaction_arb;
+    use casper_types::{gens::legal_transaction_arb, TransactionLaneDefinition};
     use proptest::prelude::*;
 
     proptest! {
         #[test]
         fn construction_roundtrip(transaction in legal_transaction_arb()) {
-            let maybe_transaction = MetaTransaction::from_transaction(&transaction, &TransactionConfig::default());
+            let mut transaction_config = TransactionConfig::default();
+            transaction_config.transaction_v1_config.set_wasm_lanes(vec![
+                TransactionLaneDefinition {
+                    id: 3,
+                    max_transaction_length: u64::MAX/2,
+                    max_transaction_args_length: 100,
+                    max_transaction_gas_limit: u64::MAX/2,
+                    max_transaction_count: 10,
+                },
+                TransactionLaneDefinition {
+                    id: 4,
+                    max_transaction_length: u64::MAX,
+                    max_transaction_args_length: 100,
+                    max_transaction_gas_limit: u64::MAX,
+                    max_transaction_count: 10,
+                },
+                ]);
+            let maybe_transaction = MetaTransaction::from_transaction(&transaction, &transaction_config);
             prop_assert!(maybe_transaction.is_ok(), "{:?}", maybe_transaction);
         }
     }
