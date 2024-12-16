@@ -19,6 +19,7 @@ use crate::{
     },
     effect::requests::StorageRequest,
     reactor::{EventQueueHandle, QueueKind, Scheduler},
+    testing::LARGE_WASM_LANE_ID,
     types::{BlockPayload, ValidatorMatrix},
     utils::{self, Loadable},
 };
@@ -152,7 +153,7 @@ pub(super) fn new_proposed_block_with_cited_signatures(
             INSTALL_UPGRADE_LANE_ID,
             install_upgrade.into_iter().collect(),
         );
-        ret.insert(3, standard.into_iter().collect());
+        ret.insert(LARGE_WASM_LANE_ID, standard.into_iter().collect());
         ret
     };
     let block_payload = BlockPayload::new(transactions, vec![], cited_signatures, true, 1u8);
