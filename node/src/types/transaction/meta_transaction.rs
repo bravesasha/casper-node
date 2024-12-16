@@ -1,7 +1,7 @@
+mod lane_id;
 mod meta_deploy;
 mod meta_transaction_v1;
 mod transaction_header;
-mod transaction_lane;
 use meta_deploy::MetaDeploy;
 pub(crate) use transaction_header::*;
 
@@ -217,7 +217,7 @@ impl MetaTransaction {
     ) -> Result<Self, InvalidTransaction> {
         match transaction {
             Transaction::Deploy(deploy) => {
-                MetaDeploy::from(deploy.clone(), &transaction_config.transaction_v1_config)
+                MetaDeploy::from_deploy(deploy.clone(), &transaction_config.transaction_v1_config)
                     .map(MetaTransaction::Deploy)
             }
             Transaction::V1(v1) => MetaTransactionV1::from_transaction_v1(
@@ -342,7 +342,7 @@ impl Display for MetaTransaction {
 #[cfg(test)]
 mod proptests {
     use super::*;
-    use casper_types::{gens::legal_transaction_arb, TransactionLanesDefinition};
+    use casper_types::{gens::legal_transaction_arb, TransactionLaneDefinition};
     use proptest::prelude::*;
 
     proptest! {
@@ -350,14 +350,14 @@ mod proptests {
         fn construction_roundtrip(transaction in legal_transaction_arb()) {
             let mut transaction_config = TransactionConfig::default();
             transaction_config.transaction_v1_config.set_wasm_lanes(vec![
-                TransactionLanesDefinition {
+                TransactionLaneDefinition {
                     id: 3,
                     max_transaction_length: u64::MAX/2,
                     max_transaction_args_length: 100,
                     max_transaction_gas_limit: u64::MAX/2,
                     max_transaction_count: 10,
                 },
-                TransactionLanesDefinition {
+                TransactionLaneDefinition {
                     id: 4,
                     max_transaction_length: u64::MAX,
                     max_transaction_args_length: 100,

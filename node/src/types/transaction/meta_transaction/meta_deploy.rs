@@ -1,5 +1,5 @@
 use casper_types::{
-    Deploy, ExecutableDeployItem, InvalidDeploy, InvalidTransaction, TransactionLanesDefinition,
+    Deploy, ExecutableDeployItem, InvalidDeploy, InvalidTransaction, TransactionLaneDefinition,
     TransactionV1Config, MINT_LANE_ID,
 };
 use datasize::DataSize;
@@ -14,7 +14,7 @@ pub(crate) struct MetaDeploy {
 }
 
 impl MetaDeploy {
-    pub(crate) fn from(
+    pub(crate) fn from_deploy(
         deploy: Deploy,
         config: &TransactionV1Config,
     ) -> Result<Self, InvalidTransaction> {
@@ -40,7 +40,7 @@ impl MetaDeploy {
         }
     }
 
-    fn calculate_lane_id_of_biggest_wasm(wasm_lanes: &[TransactionLanesDefinition]) -> Option<u8> {
+    fn calculate_lane_id_of_biggest_wasm(wasm_lanes: &[TransactionLaneDefinition]) -> Option<u8> {
         wasm_lanes
             .iter()
             .max_by(|left, right| {
@@ -62,7 +62,7 @@ impl MetaDeploy {
 #[cfg(test)]
 mod tests {
     use super::MetaDeploy;
-    use casper_types::TransactionLanesDefinition;
+    use casper_types::TransactionLaneDefinition;
     #[test]
     fn calculate_lane_id_of_biggest_wasm_should_return_none_on_empty() {
         let wasms = vec![];
@@ -72,14 +72,14 @@ mod tests {
     #[test]
     fn calculate_lane_id_of_biggest_wasm_should_return_biggest() {
         let wasms = vec![
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 0,
                 max_transaction_length: 1,
                 max_transaction_args_length: 2,
                 max_transaction_gas_limit: 3,
                 max_transaction_count: 4,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 1,
                 max_transaction_length: 10,
                 max_transaction_args_length: 2,
@@ -92,21 +92,21 @@ mod tests {
             Some(1)
         );
         let wasms = vec![
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 0,
                 max_transaction_length: 1,
                 max_transaction_args_length: 2,
                 max_transaction_gas_limit: 3,
                 max_transaction_count: 4,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 1,
                 max_transaction_length: 10,
                 max_transaction_args_length: 2,
                 max_transaction_gas_limit: 3,
                 max_transaction_count: 4,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 2,
                 max_transaction_length: 7,
                 max_transaction_args_length: 2,
@@ -120,21 +120,21 @@ mod tests {
         );
 
         let wasms = vec![
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 0,
                 max_transaction_length: 1,
                 max_transaction_args_length: 2,
                 max_transaction_gas_limit: 3,
                 max_transaction_count: 4,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 1,
                 max_transaction_length: 10,
                 max_transaction_args_length: 2,
                 max_transaction_gas_limit: 3,
                 max_transaction_count: 4,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 2,
                 max_transaction_length: 70,
                 max_transaction_args_length: 2,

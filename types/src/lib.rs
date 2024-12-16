@@ -130,7 +130,7 @@ pub use chainspec::{
     HostFunctionCost, HostFunctionCosts, LegacyRequiredFinality, MessageLimits, MintCosts,
     NetworkConfig, NextUpgrade, OpcodeCosts, PricingHandling, ProtocolConfig,
     ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts, StorageCosts, SystemConfig,
-    TransactionConfig, TransactionLanesDefinition, TransactionV1Config, VacancyConfig,
+    TransactionConfig, TransactionLaneDefinition, TransactionV1Config, VacancyConfig,
     ValidatorConfig, WasmConfig, WasmV1Config, DEFAULT_GAS_HOLD_INTERVAL,
     DEFAULT_HOST_FUNCTION_NEW_DICTIONARY, DEFAULT_MINIMUM_BID_AMOUNT, DEFAULT_REFUND_HANDLING,
 };

@@ -73,6 +73,8 @@ const TEST_PORT_RANGE: Range<u16> = 60001..60998;
 /// Random offset + stride for port generation.
 const TEST_PORT_STRIDE: u16 = 29;
 
+pub(crate) const LARGE_WASM_LANE_ID: u8 = 3;
+
 macro_rules! map {
     () => { std::collections::BTreeMap::new() };
     ( $first_key:expr => $first_value:expr $( , $key:expr => $value:expr )* $(,)? ) => {{

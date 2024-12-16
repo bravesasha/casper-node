@@ -1,4 +1,4 @@
-use super::transaction_lane::calculate_transaction_lane;
+use super::lane_id::calculate_transaction_lane;
 use crate::types::transaction::arg_handling;
 use casper_types::{
     bytesrepr::ToBytes, crypto, Approval, Chainspec, ContractRuntimeTag, Digest, DisplayIter, Gas,
@@ -735,7 +735,7 @@ mod tests {
     use crate::types::transaction::transaction_v1_builder::TransactionV1Builder;
     use casper_types::{
         testing::TestRng, InvalidTransaction, InvalidTransactionV1, PricingMode, SecretKey,
-        TransactionInvocationTarget, TransactionLanesDefinition, TransactionRuntimeParams,
+        TransactionInvocationTarget, TransactionLaneDefinition, TransactionRuntimeParams,
         TransactionV1Config,
     };
 
@@ -819,14 +819,14 @@ mod tests {
         .unwrap();
         let mut config = TransactionV1Config::default();
         config.set_wasm_lanes(vec![
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 3,
                 max_transaction_length: 200,
                 max_transaction_args_length: 100,
                 max_transaction_gas_limit: 100,
                 max_transaction_count: 10,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 4,
                 max_transaction_length: 500,
                 max_transaction_args_length: 100,
@@ -874,21 +874,21 @@ mod tests {
     fn build_v1_config() -> TransactionV1Config {
         let mut config = TransactionV1Config::default();
         config.set_wasm_lanes(vec![
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 3,
                 max_transaction_length: 10000,
                 max_transaction_args_length: 100,
                 max_transaction_gas_limit: 100,
                 max_transaction_count: 10,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 4,
                 max_transaction_length: 10001,
                 max_transaction_args_length: 100,
                 max_transaction_gas_limit: 10000,
                 max_transaction_count: 10,
             },
-            TransactionLanesDefinition {
+            TransactionLaneDefinition {
                 id: 5,
                 max_transaction_length: 10002,
                 max_transaction_args_length: 100,

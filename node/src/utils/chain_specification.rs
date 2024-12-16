@@ -196,7 +196,7 @@ mod tests {
         bytesrepr::FromBytes, ActivationPoint, BrTableCost, ChainspecRawBytes, ControlFlowCosts,
         CoreConfig, EraId, GlobalStateUpdate, HighwayConfig, HostFunction, HostFunctionCosts,
         MessageLimits, Motes, OpcodeCosts, ProtocolConfig, ProtocolVersion, StoredValue,
-        TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig, TransactionLanesDefinition,
+        TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig, TransactionLaneDefinition,
         TransactionV1Config, WasmConfig, WasmV1Config, MINT_LANE_ID,
     };
 
@@ -700,21 +700,21 @@ mod tests {
     #[test]
     fn should_fail_when_wasm_lanes_have_duplicate_max_transaction_length() {
         let mut v1_config = TransactionV1Config::default();
-        let definition_1 = TransactionLanesDefinition {
+        let definition_1 = TransactionLaneDefinition {
             id: 3,
             max_transaction_length: 100,
             max_transaction_args_length: 100,
             max_transaction_gas_limit: 100,
             max_transaction_count: 10,
         };
-        let definition_2 = TransactionLanesDefinition {
+        let definition_2 = TransactionLaneDefinition {
             id: 4,
             max_transaction_length: 10000,
             max_transaction_args_length: 100,
             max_transaction_gas_limit: 101,
             max_transaction_count: 10,
         };
-        let definition_3 = TransactionLanesDefinition {
+        let definition_3 = TransactionLaneDefinition {
             id: 5,
             max_transaction_length: 1000,
             max_transaction_args_length: 100,
@@ -748,21 +748,21 @@ mod tests {
     #[test]
     fn should_fail_when_wasm_lanes_have_duplicate_max_gas_price() {
         let mut v1_config = TransactionV1Config::default();
-        let definition_1 = TransactionLanesDefinition {
+        let definition_1 = TransactionLaneDefinition {
             id: 3,
             max_transaction_length: 100,
             max_transaction_args_length: 100,
             max_transaction_gas_limit: 100,
             max_transaction_count: 10,
         };
-        let definition_2 = TransactionLanesDefinition {
+        let definition_2 = TransactionLaneDefinition {
             id: 4,
             max_transaction_length: 10000,
             max_transaction_args_length: 100,
             max_transaction_gas_limit: 101,
             max_transaction_count: 10,
         };
-        let definition_3 = TransactionLanesDefinition {
+        let definition_3 = TransactionLaneDefinition {
             id: 5,
             max_transaction_length: 1000,
             max_transaction_args_length: 100,
@@ -802,7 +802,7 @@ mod tests {
 
     fn fail_validation_with_lane_id(lane_id: u8) {
         let mut v1_config = TransactionV1Config::default();
-        let definition_1 = TransactionLanesDefinition {
+        let definition_1 = TransactionLaneDefinition {
             id: lane_id,
             max_transaction_length: 100,
             max_transaction_args_length: 100,

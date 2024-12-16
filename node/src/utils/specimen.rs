@@ -46,6 +46,7 @@ use casper_storage::block_store::types::ApprovalsHashes;
 
 /// The largest valid unicode codepoint that can be encoded to UTF-8.
 pub(crate) const HIGHEST_UNICODE_CODEPOINT: char = '\u{10FFFF}';
+const LARGE_WASM_LANE_ID: u8 = 3;
 
 /// A cache used for memoization, typically on a single estimator.
 #[derive(Debug, Default)]
@@ -858,7 +859,7 @@ impl LargestSpecimen for BlockPayload {
             ],
         );
         transactions.insert(
-            3,
+            LARGE_WASM_LANE_ID,
             vec![
                 large_txn_hash_with_approvals.clone();
                 estimator.parameter::<usize>("max_standard_transactions_per_block")

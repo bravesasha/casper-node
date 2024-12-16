@@ -249,10 +249,11 @@ impl Display for AppendableBlock {
 mod tests {
     use casper_types::{testing::TestRng, SingleBlockRewardedSignatures, TimeDiff};
 
+    use crate::testing::LARGE_WASM_LANE_ID;
+
     use super::*;
     use std::collections::HashSet;
 
-    const LARGE_WASM_LANE_ID: u8 = 3;
     impl AppendableBlock {
         pub(crate) fn transaction_hashes(&self) -> HashSet<TransactionHash> {
             self.transactions.keys().copied().collect()

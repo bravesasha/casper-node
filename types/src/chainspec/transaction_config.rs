@@ -21,7 +21,7 @@ pub use deploy_config::DeployConfig;
 pub use deploy_config::DEFAULT_MAX_PAYMENT_MOTES;
 #[cfg(any(feature = "testing", test))]
 pub use transaction_v1_config::DEFAULT_LARGE_TRANSACTION_GAS_LIMIT;
-pub use transaction_v1_config::{TransactionLanesDefinition, TransactionV1Config};
+pub use transaction_v1_config::{TransactionLaneDefinition, TransactionV1Config};
 
 /// The default minimum number of motes that can be transferred.
 pub const DEFAULT_MIN_TRANSFER_MOTES: u64 = 2_500_000_000;
