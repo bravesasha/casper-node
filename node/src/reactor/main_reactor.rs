@@ -1130,6 +1130,8 @@ impl reactor::Reactor for MainReactor {
             registry,
         )?;
 
+        let allow_handshake = config.node.sync_handling != SyncHandling::Isolated;
+
         let network = Network::new(
             config.network.clone(),
             network_identity,
@@ -1137,6 +1139,7 @@ impl reactor::Reactor for MainReactor {
             registry,
             chainspec.as_ref(),
             validator_matrix.clone(),
+            allow_handshake,
         )?;
 
         let address_gossiper = Gossiper::<{ GossipedAddress::ID_IS_COMPLETE_ITEM }, _>::new(
