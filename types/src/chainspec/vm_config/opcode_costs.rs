@@ -14,65 +14,65 @@ use serde::{Deserialize, Serialize};
 use crate::bytesrepr::{self, FromBytes, ToBytes};
 
 /// Default cost of the `bit` Wasm opcode.
-pub const DEFAULT_BIT_COST: u32 = 35;
+pub const DEFAULT_BIT_COST: u32 = 105;
 /// Default cost of the `add` Wasm opcode.
-pub const DEFAULT_ADD_COST: u32 = 35;
+pub const DEFAULT_ADD_COST: u32 = 105;
 /// Default cost of the `mul` Wasm opcode.
-pub const DEFAULT_MUL_COST: u32 = 35;
+pub const DEFAULT_MUL_COST: u32 = 105;
 /// Default cost of the `div` Wasm opcode.
-pub const DEFAULT_DIV_COST: u32 = 35;
+pub const DEFAULT_DIV_COST: u32 = 105;
 /// Default cost of the `load` Wasm opcode.
-pub const DEFAULT_LOAD_COST: u32 = 35;
+pub const DEFAULT_LOAD_COST: u32 = 105;
 /// Default cost of the `store` Wasm opcode.
-pub const DEFAULT_STORE_COST: u32 = 35;
+pub const DEFAULT_STORE_COST: u32 = 105;
 /// Default cost of the `const` Wasm opcode.
-pub const DEFAULT_CONST_COST: u32 = 35;
+pub const DEFAULT_CONST_COST: u32 = 105;
 /// Default cost of the `local` Wasm opcode.
-pub const DEFAULT_LOCAL_COST: u32 = 35;
+pub const DEFAULT_LOCAL_COST: u32 = 105;
 /// Default cost of the `global` Wasm opcode.
-pub const DEFAULT_GLOBAL_COST: u32 = 35;
+pub const DEFAULT_GLOBAL_COST: u32 = 105;
 /// Default cost of the `integer_comparison` Wasm opcode.
-pub const DEFAULT_INTEGER_COMPARISON_COST: u32 = 35;
+pub const DEFAULT_INTEGER_COMPARISON_COST: u32 = 105;
 /// Default cost of the `conversion` Wasm opcode.
-pub const DEFAULT_CONVERSION_COST: u32 = 35;
+pub const DEFAULT_CONVERSION_COST: u32 = 105;
 /// Default cost of the `unreachable` Wasm opcode.
-pub const DEFAULT_UNREACHABLE_COST: u32 = 35;
+pub const DEFAULT_UNREACHABLE_COST: u32 = 105;
 /// Default cost of the `nop` Wasm opcode.
-pub const DEFAULT_NOP_COST: u32 = 35;
+pub const DEFAULT_NOP_COST: u32 = 105;
 /// Default cost of the `current_memory` Wasm opcode.
-pub const DEFAULT_CURRENT_MEMORY_COST: u32 = 35;
+pub const DEFAULT_CURRENT_MEMORY_COST: u32 = 105;
 /// Default cost of the `grow_memory` Wasm opcode.
-pub const DEFAULT_GROW_MEMORY_COST: u32 = 300;
+pub const DEFAULT_GROW_MEMORY_COST: u32 = 900;
 /// Default cost of the `block` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_BLOCK_OPCODE: u32 = 85;
+pub const DEFAULT_CONTROL_FLOW_BLOCK_OPCODE: u32 = 255;
 /// Default cost of the `loop` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_LOOP_OPCODE: u32 = 85;
+pub const DEFAULT_CONTROL_FLOW_LOOP_OPCODE: u32 = 255;
 /// Default cost of the `if` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_IF_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_IF_OPCODE: u32 = 105;
 /// Default cost of the `else` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_ELSE_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_ELSE_OPCODE: u32 = 105;
 /// Default cost of the `end` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_END_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_END_OPCODE: u32 = 105;
 /// Default cost of the `br` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_BR_OPCODE: u32 = 555;
+pub const DEFAULT_CONTROL_FLOW_BR_OPCODE: u32 = 1665;
 /// Default cost of the `br_if` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_BR_IF_OPCODE: u32 = 170;
+pub const DEFAULT_CONTROL_FLOW_BR_IF_OPCODE: u32 = 510;
 /// Default cost of the `return` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_RETURN_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_RETURN_OPCODE: u32 = 105;
 /// Default cost of the `select` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_SELECT_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_SELECT_OPCODE: u32 = 105;
 /// Default cost of the `call` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_CALL_OPCODE: u32 = 75;
+pub const DEFAULT_CONTROL_FLOW_CALL_OPCODE: u32 = 225;
 /// Default cost of the `call_indirect` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_CALL_INDIRECT_OPCODE: u32 = 90;
+pub const DEFAULT_CONTROL_FLOW_CALL_INDIRECT_OPCODE: u32 = 270;
 /// Default cost of the `drop` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_DROP_OPCODE: u32 = 35;
+pub const DEFAULT_CONTROL_FLOW_DROP_OPCODE: u32 = 105;
 /// Default fixed cost of the `br_table` Wasm opcode.
-pub const DEFAULT_CONTROL_FLOW_BR_TABLE_OPCODE: u32 = 50;
+pub const DEFAULT_CONTROL_FLOW_BR_TABLE_OPCODE: u32 = 150;
 /// Default multiplier for the size of targets in `br_table` Wasm opcode.
 pub const DEFAULT_CONTROL_FLOW_BR_TABLE_MULTIPLIER: u32 = 100;
 /// Default cost of the sign extension opcodes
-pub const DEFAULT_SIGN_COST: u32 = 35;
+pub const DEFAULT_SIGN_COST: u32 = 105;
 
 /// Definition of a cost table for a Wasm `br_table` opcode.
 ///
