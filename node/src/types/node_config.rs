@@ -10,7 +10,7 @@ const DEFAULT_SHUTDOWN_FOR_UPGRADE_TIMEOUT: &str = "2min";
 const DEFAULT_UPGRADE_TIMEOUT: &str = "30sec";
 
 /// Node sync configuration.
-#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default)]
+#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncHandling {
     /// Attempt to acquire all historical state back to genesis.

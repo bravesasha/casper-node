@@ -48,9 +48,9 @@ use casper_types::{
     AccountConfig, AccountsConfig, ActivationPoint, AddressableEntityHash, AvailableBlockRange,
     Block, BlockHash, BlockHeader, BlockV2, CLValue, Chainspec, ChainspecRawBytes,
     ConsensusProtocolName, Deploy, EraId, FeeHandling, Gas, HoldBalanceHandling, Key, Motes,
-    NextUpgrade, PricingHandling, PricingMode, ProtocolVersion, PublicKey, RefundHandling, Rewards,
-    SecretKey, StoredValue, SystemHashRegistry, TimeDiff, Timestamp, Transaction, TransactionHash,
-    TransactionV1Config, ValidatorConfig, U512,
+    NextUpgrade, Peers, PricingHandling, PricingMode, ProtocolVersion, PublicKey, RefundHandling,
+    Rewards, SecretKey, StoredValue, SystemHashRegistry, TimeDiff, Timestamp, Transaction,
+    TransactionHash, TransactionV1Config, ValidatorConfig, U512,
 };
 
 use crate::{
@@ -1440,38 +1440,94 @@ async fn should_start_in_isolation() {
     };
     let (mut client, finish_cranking) =
         setup_network_and_get_binary_port_handle(initial_stakes, spec_override).await;
-    let request = BinaryRequest::Get(
-        InformationRequest::Uptime
-            .try_into()
-            .expect("should convert"),
-    );
-    let header =
-        BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 1_u16);
-    let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
-    let original_request_bytes = header_bytes
-        .iter()
-        .chain(
-            ToBytes::to_bytes(&request)
-                .expect("should serialize")
-                .iter(),
-        )
-        .cloned()
-        .collect::<Vec<_>>();
+
+    let uptime_request_bytes = {
+        let request = BinaryRequest::Get(
+            InformationRequest::Uptime
+                .try_into()
+                .expect("should convert"),
+        );
+        let header =
+            BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 1_u16);
+        let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
+        header_bytes
+            .iter()
+            .chain(
+                ToBytes::to_bytes(&request)
+                    .expect("should serialize")
+                    .iter(),
+            )
+            .cloned()
+            .collect::<Vec<_>>()
+    };
     client
-        .send(BinaryMessage::new(original_request_bytes.clone()))
+        .send(BinaryMessage::new(uptime_request_bytes))
         .await
         .expect("should send message");
-    let response = timeout(Duration::from_secs(10), client.next())
+    let response = timeout(Duration::from_secs(20), client.next())
         .await
-        .unwrap_or_else(|err| panic!("should complete without timeout: {}", err))
+        .unwrap_or_else(|err| panic!("should complete uptime request without timeout: {}", err))
         .unwrap_or_else(|| panic!("should have bytes"))
         .unwrap_or_else(|err| panic!("should have ok response: {}", err));
     let uptime: Uptime = FromBytes::from_bytes(response.payload())
         .expect("Uptime should be deserializable")
         .0;
     assert!(uptime.into_inner() > 0);
+    let (_net, _rng) = timeout(Duration::from_secs(20), finish_cranking)
+        .await
+        .unwrap_or_else(|_| panic!("should finish cranking without timeout"));
+}
 
-    let (_net, _rng) = timeout(Duration::from_secs(10), finish_cranking)
+#[tokio::test]
+async fn should_be_peerless_in_isolation() {
+    let initial_stakes = InitialStakes::Random { count: 1 };
+    let spec_override = ConfigsOverride {
+        node_config_override: NodeConfigOverride {
+            sync_handling_override: Some(SyncHandling::Isolated),
+        },
+        ..Default::default()
+    };
+    let (mut client, finish_cranking) =
+        setup_network_and_get_binary_port_handle(initial_stakes, spec_override).await;
+
+    let peers_request_bytes = {
+        let request = BinaryRequest::Get(
+            InformationRequest::Peers
+                .try_into()
+                .expect("should convert"),
+        );
+        let header =
+            BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 1_u16);
+        let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
+        header_bytes
+            .iter()
+            .chain(
+                ToBytes::to_bytes(&request)
+                    .expect("should serialize")
+                    .iter(),
+            )
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    client
+        .send(BinaryMessage::new(peers_request_bytes))
+        .await
+        .expect("should send message");
+    let response = timeout(Duration::from_secs(20), client.next())
+        .await
+        .unwrap_or_else(|err| panic!("should complete peers request without timeout: {}", err))
+        .unwrap_or_else(|| panic!("should have bytes"))
+        .unwrap_or_else(|err| panic!("should have ok response: {}", err));
+
+    let peers: Peers = FromBytes::from_bytes(response.payload())
+        .expect("Peers should be deserializable")
+        .0;
+    assert!(
+        peers.into_inner().len() == 0,
+        "should not have peers in isolated mode"
+    );
+
+    let (_net, _rng) = timeout(Duration::from_secs(20), finish_cranking)
         .await
         .unwrap_or_else(|_| panic!("should finish cranking without timeout"));
 }

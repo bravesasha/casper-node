@@ -248,6 +248,7 @@ where
         registry: &Registry,
         chain_info_source: C,
         validator_matrix: ValidatorMatrix,
+        allow_handshake: bool,
     ) -> Result<Network<REv, P>> {
         let net_metrics = Arc::new(Metrics::new(registry)?);
 
@@ -285,6 +286,7 @@ where
             node_key_pair.map(NodeKeyPair::new),
             chain_info_source.into(),
             &net_metrics,
+            allow_handshake,
         ));
 
         let component = Network {
@@ -662,6 +664,7 @@ where
             | ConnectionError::TlsHandshake(_)
             | ConnectionError::HandshakeSend(_)
             | ConnectionError::HandshakeRecv(_)
+            | ConnectionError::HandshakeNotAllowed
             | ConnectionError::IncompatibleVersion(_) => None,
 
             // These errors are potential bugs on our side.
@@ -1121,6 +1124,10 @@ where
 {
     type Event = Event<P>;
 
+    fn name(&self) -> &str {
+        COMPONENT_NAME
+    }
+
     fn handle_event(
         &mut self,
         effect_builder: EffectBuilder<REv>,
@@ -1280,10 +1287,6 @@ where
                 },
             },
         }
-    }
-
-    fn name(&self) -> &str {
-        COMPONENT_NAME
     }
 }
 

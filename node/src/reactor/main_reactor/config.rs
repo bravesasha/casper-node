@@ -72,4 +72,11 @@ impl Config {
                 chainspec.transaction_config.max_timestamp_leeway;
         }
     }
+
+    /// Set network config.
+    #[cfg(test)]
+    pub(crate) fn with_network_config(mut self, network_config: NetworkConfig) -> Self {
+        self.network = network_config;
+        self
+    }
 }
