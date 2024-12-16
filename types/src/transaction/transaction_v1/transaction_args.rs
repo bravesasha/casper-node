@@ -80,6 +80,22 @@ impl TransactionArgs {
             }
         }
     }
+
+    /// Returns `true` if the transaction args is [`Named`].
+    ///
+    /// [`Named`]: TransactionArgs::Named
+    #[must_use]
+    pub fn is_named(&self) -> bool {
+        matches!(self, Self::Named(..))
+    }
+
+    /// Returns `true` if the transaction args is [`Bytesrepr`].
+    ///
+    /// [`Bytesrepr`]: TransactionArgs::Bytesrepr
+    #[must_use]
+    pub fn is_bytesrepr(&self) -> bool {
+        matches!(self, Self::Bytesrepr(..))
+    }
 }
 
 impl FromBytes for TransactionArgs {

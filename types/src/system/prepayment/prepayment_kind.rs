@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub struct PrepaidKind {
+pub struct PrepaymentKind {
     receipt: Digest,
     prepayment_kind: u8,
     prepayment_data: Bytes,
 }
 
-impl ToBytes for PrepaidKind {
+impl ToBytes for PrepaymentKind {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
         self.write_bytes(&mut buffer)?;

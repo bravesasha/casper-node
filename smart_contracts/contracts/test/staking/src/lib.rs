@@ -9,7 +9,11 @@ use alloc::{
 };
 
 use casper_contract::{
-    contract_api::{runtime, runtime::revert, system},
+    contract_api::{
+        runtime::{self, revert},
+        storage::read_from_key,
+        system,
+    },
     ext_ffi,
     unwrap_or_revert::UnwrapOrRevert,
 };
@@ -18,8 +22,8 @@ use casper_types::{
     api_error,
     bytesrepr::{self, ToBytes},
     runtime_args,
-    system::auction,
-    ApiError, Key, PublicKey, URef, U512,
+    system::auction::{self, BidAddr, BidKind},
+    ApiError, CLValue, Key, PublicKey, URef, U512,
 };
 
 pub const STAKING_ID: &str = "staking_contract";
@@ -79,6 +83,8 @@ pub fn run() {
         stake_all();
     } else if action == *"RESTAKE".to_string() {
         restake();
+    } else if action == *"STAKED_AMOUNT".to_string() {
+        read_staked_amount_gs();
     } else {
         revert(ApiError::User(StakingError::UnexpectedAction as u16));
     }
@@ -134,6 +140,34 @@ fn stake_all() {
         auction::ARG_AMOUNT => amount,
     };
     runtime::call_contract::<U512>(contract_hash, auction::METHOD_DELEGATE, args);
+}
+
+pub fn read_staked_amount_gs() {
+    let purse = get_uref_with_user_errors(
+        STAKING_PURSE,
+        StakingError::MissingStakingPurse,
+        StakingError::InvalidStakingPurse,
+    );
+
+    let validator = match runtime::try_get_named_arg::<PublicKey>(ARG_VALIDATOR) {
+        Some(validator_public_key) => validator_public_key,
+        None => revert(ApiError::User(StakingError::MissingValidator as u16)),
+    };
+
+    let key = Key::BidAddr(BidAddr::DelegatedPurse {
+        validator: validator.to_account_hash(),
+        delegator: purse.addr(),
+    });
+
+    let bid = read_from_key::<BidKind>(key);
+
+    let staked_amount = if let Ok(Some(BidKind::Delegator(delegator_bid))) = bid {
+        delegator_bid.staked_amount()
+    } else {
+        U512::zero()
+    };
+
+    runtime::ret(CLValue::from_t(staked_amount).unwrap_or_revert());
 }
 
 fn get_unstaking_args(is_restake: bool) -> casper_types::RuntimeArgs {

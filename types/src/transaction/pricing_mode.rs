@@ -411,7 +411,7 @@ impl Display for PricingMode {
                     payment_amount, gas_price, standard_payment
                 )
             }
-            PricingMode::Prepaid { receipt } => write!(formatter, "reserved: {}", receipt),
+            PricingMode::Prepaid { receipt } => write!(formatter, "prepaid: {}", receipt),
             PricingMode::Fixed {
                 gas_price_tolerance,
                 additional_computation_factor,

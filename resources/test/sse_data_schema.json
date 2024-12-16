@@ -3890,14 +3890,14 @@
           "additionalProperties": false
         },
         {
-          "description": "A reservation record.",
+          "description": "A prepayment record.",
           "type": "object",
           "required": [
-            "Prepaid"
+            "Prepayment"
           ],
           "properties": {
-            "Prepaid": {
-              "$ref": "#/definitions/PrepaidKind"
+            "Prepayment": {
+              "$ref": "#/definitions/PrepaymentKind"
             }
           },
           "additionalProperties": false
@@ -4763,7 +4763,7 @@
         }
       }
     },
-    "PrepaidKind": {
+    "PrepaymentKind": {
       "description": "Container for bytes recording location, type and data for a gas pre payment",
       "type": "object",
       "required": [
