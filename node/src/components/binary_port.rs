@@ -1097,10 +1097,24 @@ where
                 protocol_version,
             )
         }
-        InformationRequest::Peers => BinaryResponse::from_value(
-            Peers::from(effect_builder.network_peers().await),
-            protocol_version,
-        ),
+        InformationRequest::Peers => {
+            let map = effect_builder.network_peers().await;
+            if map.is_empty() {
+                BinaryResponse::new_empty(protocol_version)
+            } else {
+                let peers = Peers::from(map);
+                BinaryResponse::from_value(peers, protocol_version)
+            }
+        }
+        InformationRequest::PeerCount => {
+            let map = effect_builder.network_peers().await;
+            let count = map.len() as u32;
+            if let Ok(bytes) = u32::to_bytes(&count) {
+                BinaryResponse::from_raw_bytes(ResponseType::PeerCount, bytes, protocol_version)
+            } else {
+                BinaryResponse::new_error(ErrorCode::PeerCountUnavailable, protocol_version)
+            }
+        }
         InformationRequest::Uptime => {
             BinaryResponse::from_value(effect_builder.get_uptime().await, protocol_version)
         }
@@ -1499,6 +1513,7 @@ where
 
                 let (response, id) =
                     handle_payload(effect_builder, payload, version, Arc::clone(&rate_limiter)).await;
+
                 framed
                     .send(BinaryMessage::new(
                         BinaryResponseAndRequest::new(response, payload, id).to_bytes()?,
