@@ -83,6 +83,8 @@ pub enum InformationRequest {
         /// Whether to return the bytecode with the entity.
         include_bytecode: bool,
     },
+    /// Returns the count of connected peers.
+    PeerCount,
 }
 
 impl InformationRequest {
@@ -115,6 +117,7 @@ impl InformationRequest {
             InformationRequest::ProtocolVersion => InformationRequestTag::ProtocolVersion,
             InformationRequest::Package { .. } => InformationRequestTag::Package,
             InformationRequest::Entity { .. } => InformationRequestTag::Entity,
+            InformationRequest::PeerCount => InformationRequestTag::PeerCount,
         }
     }
 
@@ -132,6 +135,7 @@ impl InformationRequest {
                 with_finalized_approvals: rng.gen(),
             },
             InformationRequestTag::Peers => InformationRequest::Peers,
+            InformationRequestTag::PeerCount => InformationRequest::PeerCount,
             InformationRequestTag::Uptime => InformationRequest::Uptime,
             InformationRequestTag::LastProgress => InformationRequest::LastProgress,
             InformationRequestTag::ReactorState => InformationRequest::ReactorState,
@@ -198,6 +202,7 @@ impl ToBytes for InformationRequest {
                 with_finalized_approvals.write_bytes(writer)
             }
             InformationRequest::Peers
+            | InformationRequest::PeerCount
             | InformationRequest::Uptime
             | InformationRequest::LastProgress
             | InformationRequest::ReactorState
@@ -253,6 +258,7 @@ impl ToBytes for InformationRequest {
                 with_finalized_approvals,
             } => hash.serialized_length() + with_finalized_approvals.serialized_length(),
             InformationRequest::Peers
+            | InformationRequest::PeerCount
             | InformationRequest::Uptime
             | InformationRequest::LastProgress
             | InformationRequest::ReactorState
@@ -317,6 +323,7 @@ impl TryFrom<(InformationRequestTag, &[u8])> for InformationRequest {
                 )
             }
             InformationRequestTag::Peers => (InformationRequest::Peers, key_bytes),
+            InformationRequestTag::PeerCount => (InformationRequest::PeerCount, key_bytes),
             InformationRequestTag::Uptime => (InformationRequest::Uptime, key_bytes),
             InformationRequestTag::LastProgress => (InformationRequest::LastProgress, key_bytes),
             InformationRequestTag::ReactorState => (InformationRequest::ReactorState, key_bytes),
@@ -444,6 +451,8 @@ pub enum InformationRequestTag {
     Package = 18,
     /// Addressable entity request.
     Entity = 19,
+    /// Peer count.
+    PeerCount = 20,
 }
 
 impl InformationRequestTag {
@@ -470,6 +479,7 @@ impl InformationRequestTag {
             17 => InformationRequestTag::ProtocolVersion,
             18 => InformationRequestTag::Package,
             19 => InformationRequestTag::Entity,
+            20 => InformationRequestTag::PeerCount,
             _ => unreachable!(),
         }
     }
@@ -500,6 +510,7 @@ impl TryFrom<u16> for InformationRequestTag {
             17 => Ok(InformationRequestTag::ProtocolVersion),
             18 => Ok(InformationRequestTag::Package),
             19 => Ok(InformationRequestTag::Entity),
+            20 => Ok(InformationRequestTag::PeerCount),
             _ => Err(UnknownInformationRequestTag(value)),
         }
     }
