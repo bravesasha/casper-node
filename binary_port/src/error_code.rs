@@ -268,9 +268,9 @@ pub enum ErrorCode {
     /// Entry point cannot be 'call'
     #[error("entry point cannot be 'call'")]
     InvalidTransactionEntryPointCannotBeCall = 83,
-    /// Invalid transaction kind
-    #[error("invalid transaction kind")]
-    InvalidTransactionInvalidTransactionKind = 84,
+    /// Invalid transaction lane
+    #[error("invalid transaction lane")]
+    InvalidTransactionInvalidTransactionLane = 84,
     /// Gas price tolerance too low
     #[error("gas price tolerance too low")]
     GasPriceToleranceTooLow = 85,
@@ -307,6 +307,9 @@ pub enum ErrorCode {
     /// Malformed binary request
     #[error("malformed binary request")]
     MalformedBinaryRequest = 96,
+    /// No matching lane for transaction
+    #[error("couldn't associate a transaction lane with the transaction")]
+    InvalidTransactionNoWasmLaneMatches = 97,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -398,7 +401,7 @@ impl TryFrom<u16> for ErrorCode {
             81 => Ok(ErrorCode::DeployMissingTransferTarget),
             82 => Ok(ErrorCode::DeployMissingModuleBytes),
             83 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCall),
-            84 => Ok(ErrorCode::InvalidTransactionInvalidTransactionKind),
+            84 => Ok(ErrorCode::InvalidTransactionInvalidTransactionLane),
             85 => Ok(ErrorCode::GasPriceToleranceTooLow),
             86 => Ok(ErrorCode::ReceivedV1Transaction),
             87 => Ok(ErrorCode::PurseNotFound),
@@ -411,6 +414,7 @@ impl TryFrom<u16> for ErrorCode {
             94 => Ok(ErrorCode::MalformedProtocolVersion),
             95 => Ok(ErrorCode::MalformedBinaryRequestHeader),
             96 => Ok(ErrorCode::MalformedBinaryRequest),
+            97 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
             _ => Err(UnknownErrorCode),
         }
     }
@@ -544,7 +548,7 @@ impl From<InvalidTransactionV1> for ErrorCode {
                 ErrorCode::InvalidTransactionEntryPointCannotBeCall
             }
             InvalidTransactionV1::InvalidTransactionLane(_) => {
-                ErrorCode::InvalidTransactionInvalidTransactionKind
+                ErrorCode::InvalidTransactionInvalidTransactionLane
             }
             InvalidTransactionV1::GasPriceToleranceTooLow { .. } => {
                 ErrorCode::GasPriceToleranceTooLow
@@ -552,6 +556,9 @@ impl From<InvalidTransactionV1> for ErrorCode {
             InvalidTransactionV1::ExpectedNamedArguments => ErrorCode::ExpectedNamedArguments,
             InvalidTransactionV1::InvalidTransactionRuntime { .. } => {
                 ErrorCode::InvalidTransactionRuntime
+            }
+            InvalidTransactionV1::NoWasmLaneMatchesTransaction() => {
+                ErrorCode::InvalidTransactionNoWasmLaneMatches
             }
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
