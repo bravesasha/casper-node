@@ -658,7 +658,8 @@ impl TestScenario {
                     TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_pricing_mode(PricingMode::PaymentLimited {
-                    payment_amount: u64::MAX, // make sure it's a big value that doesn't match any wasm lane
+                    payment_amount: u64::MAX, /* make sure it's a big value that doesn't match
+                                               * any wasm lane */
                     gas_price_tolerance: 2,
                     standard_payment: true,
                 })
