@@ -251,7 +251,7 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
             ABITestCase::from_inputs(vec![UREF_KEY.into()])?,
         );
         keys.insert(
-            "LegacyTransfer".to_string(),
+            "Transfer".to_string(),
             ABITestCase::from_inputs(vec![TRANSFER_KEY.into()])?,
         );
         keys.insert(
@@ -433,8 +433,8 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
         );
 
         stored_value.insert(
-            "LegacyTransfer".to_string(),
-            ABITestCase::from_inputs(vec![StoredValue::LegacyTransfer(legacy_transfer).into()])?,
+            "Transfer".to_string(),
+            ABITestCase::from_inputs(vec![StoredValue::Transfer(legacy_transfer).into()])?,
         );
         stored_value.insert(
             "DeployInfo".to_string(),

@@ -742,7 +742,7 @@ where
             | StoredValue::Contract(_)
             | StoredValue::AddressableEntity(_)
             | StoredValue::SmartContract(_)
-            | StoredValue::LegacyTransfer(_)
+            | StoredValue::Transfer(_)
             | StoredValue::DeployInfo(_)
             | StoredValue::EraInfo(_)
             | StoredValue::Bid(_)
