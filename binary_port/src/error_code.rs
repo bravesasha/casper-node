@@ -605,6 +605,7 @@ impl From<InvalidTransactionV1> for ErrorCode {
             }
             InvalidTransactionV1::MissingSeed => ErrorCode::InvalidTransactionMissingSeed,
             InvalidTransactionV1::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
+            _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }
 }
