@@ -310,6 +310,27 @@ pub enum ErrorCode {
     /// No matching lane for transaction
     #[error("couldn't associate a transaction lane with the transaction")]
     InvalidTransactionNoWasmLaneMatches = 97,
+    /// Entry point must be 'call'
+    #[error("entry point must be 'call'")]
+    InvalidTransactionEntryPointMustBeCall = 98,
+    /// One of the payloads field cannot be deserialized
+    #[error("One of the payloads field cannot be deserialized")]
+    InvalidTransactionCannotDeserializeField = 99,
+    /// Can't calculate hash of the payload fields
+    #[error("Can't calculate hash of the payload fields")]
+    InvalidTransactionCannotCalculateFieldsHash = 100,
+    /// Unexpected fields in payload
+    #[error("Unexpected fields in payload")]
+    InvalidTransactionUnexpectedFields = 101,
+    /// Expected bytes arguments
+    #[error("expected bytes arguments")]
+    InvalidTransactionExpectedBytesArguments = 102,
+    /// Missing seed field in transaction
+    #[error("Missing seed field in transaction")]
+    InvalidTransactionMissingSeed = 103,
+    /// Pricing mode not supported
+    #[error("Pricing mode not supported")]
+    PricingModeNotSupported = 104,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -415,6 +436,13 @@ impl TryFrom<u16> for ErrorCode {
             95 => Ok(ErrorCode::MalformedBinaryRequestHeader),
             96 => Ok(ErrorCode::MalformedBinaryRequest),
             97 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
+            98 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCall),
+            99 => Ok(ErrorCode::InvalidTransactionCannotDeserializeField),
+            100 => Ok(ErrorCode::InvalidTransactionCannotCalculateFieldsHash),
+            101 => Ok(ErrorCode::InvalidTransactionUnexpectedFields),
+            102 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
+            103 => Ok(ErrorCode::InvalidTransactionMissingSeed),
+            104 => Ok(ErrorCode::PricingModeNotSupported),
             _ => Err(UnknownErrorCode),
         }
     }
@@ -560,7 +588,23 @@ impl From<InvalidTransactionV1> for ErrorCode {
             InvalidTransactionV1::NoWasmLaneMatchesTransaction() => {
                 ErrorCode::InvalidTransactionNoWasmLaneMatches
             }
-            _other => ErrorCode::InvalidTransactionUnspecified,
+            InvalidTransactionV1::EntryPointMustBeCall { .. } => {
+                ErrorCode::InvalidTransactionEntryPointMustBeCall
+            }
+            InvalidTransactionV1::CouldNotDeserializeField { .. } => {
+                ErrorCode::InvalidTransactionCannotDeserializeField
+            }
+            InvalidTransactionV1::CannotCalculateFieldsHash => {
+                ErrorCode::InvalidTransactionCannotCalculateFieldsHash
+            }
+            InvalidTransactionV1::UnexpectedTransactionFieldEntries => {
+                ErrorCode::InvalidTransactionUnexpectedFields
+            }
+            InvalidTransactionV1::ExpectedBytesArguments => {
+                ErrorCode::InvalidTransactionExpectedBytesArguments
+            }
+            InvalidTransactionV1::MissingSeed => ErrorCode::InvalidTransactionMissingSeed,
+            InvalidTransactionV1::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
         }
     }
 }
