@@ -218,6 +218,7 @@ enum TestScenario {
     InvalidFields,
     InvalidFieldsFromPeer,
     InvalidArgumentsKind,
+    WasmTransactionWithTooBigPayment,
 }
 
 impl TestScenario {
@@ -263,7 +264,8 @@ impl TestScenario {
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForDeploy
             | TestScenario::InvalidFields
-            | TestScenario::InvalidArgumentsKind => Source::Client,
+            | TestScenario::InvalidArgumentsKind
+            | TestScenario::WasmTransactionWithTooBigPayment => Source::Client,
         }
     }
 
@@ -645,6 +647,30 @@ impl TestScenario {
                 .unwrap();
                 Transaction::from(txn)
             }
+            TestScenario::WasmTransactionWithTooBigPayment => {
+                let timestamp = Timestamp::now()
+                    + Config::default().timestamp_leeway
+                    + TimeDiff::from_millis(100);
+                let ttl = TimeDiff::from_seconds(300);
+                let txn = TransactionV1Builder::new_session(
+                    false,
+                    Bytes::from(vec![1]),
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_pricing_mode(PricingMode::PaymentLimited {
+                    payment_amount: u64::MAX, /* make sure it's a big value that doesn't match
+                                               * any wasm lane */
+                    gas_price_tolerance: 2,
+                    standard_payment: true,
+                })
+                .with_chain_name("casper-example")
+                .with_timestamp(timestamp)
+                .with_ttl(ttl)
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
         }
     }
 
@@ -704,6 +730,7 @@ impl TestScenario {
             TestScenario::InvalidFields => false,
             TestScenario::InvalidFieldsFromPeer => false,
             TestScenario::InvalidArgumentsKind => false,
+            TestScenario::WasmTransactionWithTooBigPayment => false,
         }
     }
 
@@ -1263,7 +1290,8 @@ async fn run_transaction_acceptor_without_timeout(
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForDeploy
             | TestScenario::InvalidFields
-            | TestScenario::InvalidArgumentsKind => {
+            | TestScenario::InvalidArgumentsKind
+            | TestScenario::WasmTransactionWithTooBigPayment => {
                 matches!(
                     event,
                     Event::TransactionAcceptorAnnouncement(
@@ -2542,6 +2570,17 @@ async fn should_reject_transaction_with_invalid_transaction_args() {
         result,
         Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
             InvalidTransactionV1::ExpectedNamedArguments
+        )))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_wasm_transaction_with_limited_too_big_payment() {
+    let result = run_transaction_acceptor(TestScenario::WasmTransactionWithTooBigPayment).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::NoWasmLaneMatchesTransaction()
         )))
     ));
 }
