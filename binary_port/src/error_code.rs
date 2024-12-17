@@ -307,9 +307,6 @@ pub enum ErrorCode {
     /// Malformed binary request
     #[error("malformed binary request")]
     MalformedBinaryRequest = 96,
-    /// Peer count unavailable
-    #[error("peer count unavailable")]
-    PeerCountUnavailable = 97,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -414,7 +411,6 @@ impl TryFrom<u16> for ErrorCode {
             94 => Ok(ErrorCode::MalformedProtocolVersion),
             95 => Ok(ErrorCode::MalformedBinaryRequestHeader),
             96 => Ok(ErrorCode::MalformedBinaryRequest),
-            97 => Ok(ErrorCode::PeerCountUnavailable),
             _ => Err(UnknownErrorCode),
         }
     }

@@ -12,8 +12,8 @@ use std::{
 };
 
 use casper_binary_port::{
-    BinaryMessage, BinaryMessageCodec, BinaryRequest, BinaryRequestHeader, InformationRequest,
-    Uptime,
+    BinaryMessage, BinaryMessageCodec, BinaryRequest, BinaryRequestHeader,
+    BinaryResponseAndRequest, InformationRequest, Uptime,
 };
 use either::Either;
 use futures::{SinkExt, StreamExt};
@@ -48,9 +48,9 @@ use casper_types::{
     AccountConfig, AccountsConfig, ActivationPoint, AddressableEntityHash, AvailableBlockRange,
     Block, BlockHash, BlockHeader, BlockV2, CLValue, Chainspec, ChainspecRawBytes,
     ConsensusProtocolName, Deploy, EraId, FeeHandling, Gas, HoldBalanceHandling, Key, Motes,
-    NextUpgrade, PricingHandling, PricingMode, ProtocolVersion, PublicKey, RefundHandling, Rewards,
-    SecretKey, StoredValue, SystemHashRegistry, TimeDiff, Timestamp, Transaction, TransactionHash,
-    TransactionV1Config, ValidatorConfig, U512,
+    NextUpgrade, Peers, PricingHandling, PricingMode, ProtocolVersion, PublicKey, RefundHandling,
+    Rewards, SecretKey, StoredValue, SystemHashRegistry, TimeDiff, Timestamp, Transaction,
+    TransactionHash, TransactionV1Config, ValidatorConfig, U512,
 };
 
 use crate::{
@@ -1469,9 +1469,12 @@ async fn should_start_in_isolation() {
         .unwrap_or_else(|err| panic!("should complete uptime request without timeout: {}", err))
         .unwrap_or_else(|| panic!("should have bytes"))
         .unwrap_or_else(|err| panic!("should have ok response: {}", err));
-    let uptime: Uptime = FromBytes::from_bytes(response.payload())
-        .expect("Uptime should be deserializable")
-        .0;
+    let (binary_response_and_request, _): (BinaryResponseAndRequest, _) =
+        FromBytes::from_bytes(response.payload()).expect("should deserialize response");
+    let response = binary_response_and_request.response().payload();
+    let (uptime, remainder): (Uptime, _) =
+        FromBytes::from_bytes(response).expect("Peers should be deserializable");
+    assert!(remainder.is_empty());
     assert!(uptime.into_inner() > 0);
     let (_net, _rng) = timeout(Duration::from_secs(20), finish_cranking)
         .await
@@ -1490,9 +1493,9 @@ async fn should_be_peerless_in_isolation() {
     let (mut client, finish_cranking) =
         setup_network_and_get_binary_port_handle(initial_stakes, spec_override).await;
 
-    let peer_count_request_bytes = {
+    let peers_request_bytes = {
         let request = BinaryRequest::Get(
-            InformationRequest::PeerCount
+            InformationRequest::Peers
                 .try_into()
                 .expect("should convert"),
         );
@@ -1510,7 +1513,7 @@ async fn should_be_peerless_in_isolation() {
             .collect::<Vec<_>>()
     };
     client
-        .send(BinaryMessage::new(peer_count_request_bytes))
+        .send(BinaryMessage::new(peers_request_bytes))
         .await
         .expect("should send message");
     let response = timeout(Duration::from_secs(20), client.next())
@@ -1518,11 +1521,17 @@ async fn should_be_peerless_in_isolation() {
         .unwrap_or_else(|err| panic!("should complete peers request without timeout: {}", err))
         .unwrap_or_else(|| panic!("should have bytes"))
         .unwrap_or_else(|err| panic!("should have ok response: {}", err));
+    let (binary_response_and_request, _): (BinaryResponseAndRequest, _) =
+        FromBytes::from_bytes(response.payload()).expect("should deserialize response");
+    let response = binary_response_and_request.response().payload();
 
-    let (peer_count, _) =
-        <u32>::from_bytes(response.payload()).expect("Peers should be deserializable");
-
-    assert_eq!(peer_count, 0, "should not have peers in isolated mode");
+    let (peers, remainder): (Peers, _) =
+        FromBytes::from_bytes(response).expect("Peers should be deserializable");
+    assert!(remainder.is_empty());
+    assert!(
+        peers.into_inner().is_empty(),
+        "should not have peers in isolated mode"
+    );
 
     let (_net, _rng) = timeout(Duration::from_secs(20), finish_cranking)
         .await

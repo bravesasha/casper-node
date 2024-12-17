@@ -121,8 +121,6 @@ pub enum ResponseType {
     AddressableEntityInformation,
     /// Response to KeepAliveRequest query
     KeepAliveInformation,
-    /// Peer count.
-    PeerCount,
 }
 
 impl ResponseType {
@@ -233,7 +231,6 @@ impl TryFrom<u8> for ResponseType {
             x if x == ResponseType::KeepAliveInformation as u8 => {
                 Ok(ResponseType::KeepAliveInformation)
             }
-            x if x == ResponseType::PeerCount as u8 => Ok(ResponseType::PeerCount),
             _ => Err(()),
         }
     }
@@ -299,7 +296,6 @@ impl fmt::Display for ResponseType {
             ResponseType::KeepAliveInformation => {
                 write!(f, "KeepAliveInformation")
             }
-            ResponseType::PeerCount => write!(f, "PeerCount"),
         }
     }
 }
