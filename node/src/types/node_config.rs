@@ -10,7 +10,7 @@ const DEFAULT_SHUTDOWN_FOR_UPGRADE_TIMEOUT: &str = "2min";
 const DEFAULT_UPGRADE_TIMEOUT: &str = "30sec";
 
 /// Node sync configuration.
-#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default)]
+#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncHandling {
     /// Attempt to acquire all historical state back to genesis.
@@ -23,6 +23,9 @@ pub enum SyncHandling {
     /// Don't attempt to sync historical blocks and shut down node instead of switching to KeepUp
     /// after acquiring the first complete block
     CompleteBlock,
+    /// The node operates in isolation - no peers are needed, the node won't wait for peers to
+    /// switch to KeepUp.
+    Isolated,
 }
 
 impl SyncHandling {
@@ -44,6 +47,11 @@ impl SyncHandling {
     /// Don't Sync and shut down?
     pub fn is_complete_block(&self) -> bool {
         matches!(self, SyncHandling::CompleteBlock)
+    }
+
+    /// Isolated?
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, SyncHandling::Isolated)
     }
 }
 

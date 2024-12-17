@@ -10,6 +10,7 @@
 #  'genesis'  (node will attempt to acquire all block data back to genesis)
 #  'ttl'      (node will attempt to acquire all block data to comply with time to live enforcement)
 #  'nosync'   (node will only acquire blocks moving forward)
+#  'isolated' (node will initialize without peers and will not accept peers)
 # note: ttl is a chainsepc configured behavior on a given network; consult the `max_ttl` chainspec setting
 #       (it is currently ~18 hours by default on production and production-like networks but subject to change).
 # note: `nosync` is incompatible with validator behavior; a nosync node is prevented from participating

@@ -159,16 +159,16 @@ impl Display for Error {
 }
 
 impl ToBytes for Error {
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), Error> {
-        (*self as u8).write_bytes(writer)
-    }
-
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         (*self as u8).to_bytes()
     }
 
     fn serialized_length(&self) -> usize {
         U8_SERIALIZED_LENGTH
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), Error> {
+        (*self as u8).write_bytes(writer)
     }
 }
 
@@ -541,7 +541,7 @@ fn vec_from_vec<T: FromBytes>(bytes: Vec<u8>) -> Result<(Vec<T>, Vec<u8>), Error
 /// 4096 bytes. This function will never return less than 1.
 #[inline]
 fn cautious<T>(hint: usize) -> usize {
-    let el_size = core::mem::size_of::<T>();
+    let el_size = mem::size_of::<T>();
     core::cmp::max(core::cmp::min(hint, 4096 / el_size), 1)
 }
 
