@@ -89,7 +89,7 @@
     ],
     "output": "012a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
   },
-  "LegacyTransfer": {
+  "Transfer": {
     "input": [
       {
         "type": "Key",

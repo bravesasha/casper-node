@@ -225,12 +225,12 @@
     ],
     "output": "07020000000001197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d610400ca9a3b01000202bb58b5feca505c74edc000d8282fc556e51a1024fc8e7d7e56c6f887c5c8d5f201197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d610400ca9a3b"
   },
-  "LegacyTransfer": {
+  "Transfer": {
     "input": [
       {
         "type": "StoredValue",
         "value": {
-          "LegacyTransfer": {
+          "Transfer": {
             "deploy_hash": "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
             "from": "account-hash-6464646464646464646464646464646464646464646464646464646464646464",
             "to": "account-hash-6565656565656565656565656565656565656565656565656565656565656565",
