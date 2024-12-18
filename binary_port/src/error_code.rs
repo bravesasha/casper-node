@@ -331,6 +331,12 @@ pub enum ErrorCode {
     /// Pricing mode not supported
     #[error("Pricing mode not supported")]
     PricingModeNotSupported = 104,
+    /// Gas limit not supported
+    #[error("Gas limit not supported")]
+    InvalidDeployGasLimitNotSupported = 105,
+    /// Invalid runtime for Transaction::Deploy
+    #[error("Invalid runtime for Transaction::Deploy")]
+    InvalidDeployInvalidRuntime = 106,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -443,6 +449,8 @@ impl TryFrom<u16> for ErrorCode {
             102 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
             103 => Ok(ErrorCode::InvalidTransactionMissingSeed),
             104 => Ok(ErrorCode::PricingModeNotSupported),
+            105 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
+            106 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
             _ => Err(UnknownErrorCode),
         }
     }
@@ -514,6 +522,8 @@ impl From<InvalidDeploy> for ErrorCode {
                 ErrorCode::InvalidDeployUnableToCalculateGasCost
             }
             InvalidDeploy::GasPriceToleranceTooLow { .. } => ErrorCode::GasPriceToleranceTooLow,
+            InvalidDeploy::GasLimitNotSupported => ErrorCode::InvalidDeployGasLimitNotSupported,
+            InvalidDeploy::InvalidRuntime => ErrorCode::InvalidDeployInvalidRuntime,
             _ => ErrorCode::InvalidDeployUnspecified,
         }
     }

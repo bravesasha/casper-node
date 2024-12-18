@@ -27,7 +27,7 @@ impl MetaDeploy {
         } else {
             // Seems like chainspec didn't have any wasm lanes configured
             Err(InvalidTransaction::Deploy(
-                InvalidDeploy::InvalidChainspecConfiguration,
+                InvalidDeploy::ChainspecHasNoWasmLanesDefined,
             ))
         }
     }
