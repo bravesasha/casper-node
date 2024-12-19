@@ -3,7 +3,7 @@ use num_rational::Ratio;
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use casper_types::{
     addressable_entity::{
@@ -1075,61 +1075,6 @@ where
             )?);
             self.tracking_copy.write(*locked_funds_period_key, value);
         }
-        Ok(())
-    }
-
-    /// Handle legacy account migration.
-    pub fn handle_legacy_accounts_migration(&mut self) -> Result<(), ProtocolUpgradeError> {
-        if !self.config.migrate_legacy_accounts() {
-            return Ok(());
-        }
-        info!("handling one time accounts migration");
-        let tc = &mut self.tracking_copy;
-        let existing_keys = match tc.get_keys(&KeyTag::Account) {
-            Ok(keys) => keys,
-            Err(err) => return Err(ProtocolUpgradeError::TrackingCopy(err)),
-        };
-        let protocol_version = self.config.new_protocol_version();
-        for existing_key in existing_keys {
-            match existing_key.into_account() {
-                None => {
-                    // should we skip this and keep going or error?
-                    // for now, skipping.
-                    continue;
-                }
-                Some(account_hash) => {
-                    if let Err(tce) = tc.migrate_account(account_hash, protocol_version) {
-                        return Err(ProtocolUpgradeError::TrackingCopy(tce));
-                    }
-                }
-            }
-        }
-        info!("ending one time accounts migration");
-        Ok(())
-    }
-
-    /// Handle legacy contract migration.
-    pub fn handle_legacy_contracts_migration(&mut self) -> Result<(), ProtocolUpgradeError> {
-        if !self.config.migrate_legacy_contracts() {
-            return Ok(());
-        }
-        info!("handling one time contracts migration");
-        let tc = &mut self.tracking_copy;
-        let existing_keys = match tc.get_keys(&KeyTag::Hash) {
-            Ok(keys) => keys,
-            Err(err) => return Err(ProtocolUpgradeError::TrackingCopy(err)),
-        };
-        let protocol_version = self.config.new_protocol_version();
-        for existing_key in existing_keys {
-            if let Some(StoredValue::ContractPackage(_)) = tc.read(&existing_key)? {
-                if let Err(tce) = tc.migrate_package(existing_key, protocol_version) {
-                    return Err(ProtocolUpgradeError::TrackingCopy(tce));
-                }
-            } else {
-                continue;
-            }
-        }
-        info!("ending one time contracts migration");
         Ok(())
     }
 
