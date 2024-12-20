@@ -2030,6 +2030,22 @@ where
             return Ok(Err(err));
         }
         let args: RuntimeArgs = bytesrepr::deserialize_from_slice(args_bytes)?;
+
+        if let Some(payment_purse) = self.context.maybe_payment_purse() {
+            for named_arg in args.named_args() {
+                if utils::extract_urefs(named_arg.cl_value())?
+                    .into_iter()
+                    .any(|uref| uref.remove_access_rights() == payment_purse.remove_access_rights())
+                {
+                    warn!("attempt to call_contract with payment purse");
+
+                    return Err(Into::into(ExecError::Revert(ApiError::HandlePayment(
+                        handle_payment::Error::AttemptToPersistPaymentPurse as u8,
+                    ))));
+                }
+            }
+        }
+
         let result = self.call_contract(contract_hash, entry_point_name, args)?;
         self.manage_call_contract_host_buffer(result_size_ptr, result)
     }
@@ -2047,6 +2063,22 @@ where
             return Ok(Err(err));
         }
         let args: RuntimeArgs = bytesrepr::deserialize_from_slice(args_bytes)?;
+
+        if let Some(payment_purse) = self.context.maybe_payment_purse() {
+            for named_arg in args.named_args() {
+                if utils::extract_urefs(named_arg.cl_value())?
+                    .into_iter()
+                    .any(|uref| uref.remove_access_rights() == payment_purse.remove_access_rights())
+                {
+                    warn!("attempt to call_versioned_contract with payment purse");
+
+                    return Err(Into::into(ExecError::Revert(ApiError::HandlePayment(
+                        handle_payment::Error::AttemptToPersistPaymentPurse as u8,
+                    ))));
+                }
+            }
+        }
+
         let result = self.call_versioned_contract(
             contract_package_hash,
             contract_version,
