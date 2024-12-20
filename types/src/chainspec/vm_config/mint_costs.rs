@@ -13,7 +13,7 @@ use crate::bytesrepr::{self, FromBytes, ToBytes};
 /// Default cost of the `mint` mint entry point.
 pub const DEFAULT_MINT_COST: u32 = 2_500_000_000;
 /// Default cost of the `reduce_total_supply` mint entry point.
-pub const DEFAULT_REDUCE_TOTAL_SUPPLY_COST: u32 = 10_000;
+pub const DEFAULT_REDUCE_TOTAL_SUPPLY_COST: u32 = 2_500_000_000;
 /// Default cost of the `burn` mint entry point.
 pub const DEFAULT_BURN_COST: u32 = 10_000;
 /// Default cost of the `create` mint entry point.
@@ -23,7 +23,7 @@ pub const DEFAULT_BALANCE_COST: u32 = 10_000;
 /// Default cost of the `transfer` mint entry point.
 pub const DEFAULT_TRANSFER_COST: u32 = 100_000_000;
 /// Default cost of the `read_base_round_reward` mint entry point.
-pub const DEFAULT_READ_BASE_ROUND_REWARD_COST: u32 = 10_000;
+pub const DEFAULT_READ_BASE_ROUND_REWARD_COST: u32 = 2_500_000_000;
 /// Default cost of the `mint_into_existing_purse` mint entry point.
 pub const DEFAULT_MINT_INTO_EXISTING_PURSE_COST: u32 = 2_500_000_000;
 

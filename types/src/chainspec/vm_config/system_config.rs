@@ -14,11 +14,14 @@ use crate::{
     chainspec::vm_config::{AuctionCosts, HandlePaymentCosts, MintCosts, StandardPaymentCosts},
 };
 
+/// Default cost for calls not a non-existent entrypoint.
+pub const DEFAULT_NO_SUCH_ENTRYPOINT_COST: u64 = 2_500_000_000;
+
 /// Definition of costs in the system.
 ///
 /// This structure contains the costs of all the system contract's entry points and, additionally,
 /// it defines a wasmless mint cost.
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[serde(deny_unknown_fields)]
 pub struct SystemConfig {
@@ -36,6 +39,19 @@ pub struct SystemConfig {
 
     /// Configuration of standard payment costs.
     standard_payment_costs: StandardPaymentCosts,
+}
+
+impl Default for SystemConfig {
+    /// Implements Default for SystemConfig.
+    fn default() -> Self {
+        Self {
+            no_such_entrypoint: DEFAULT_NO_SUCH_ENTRYPOINT_COST,
+            auction_costs: Default::default(),
+            handle_payment_costs: Default::default(),
+            mint_costs: Default::default(),
+            standard_payment_costs: Default::default(),
+        }
+    }
 }
 
 impl SystemConfig {
