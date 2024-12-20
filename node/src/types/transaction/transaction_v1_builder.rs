@@ -176,7 +176,7 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Returns a new `TransactionV1Builder` suitable for building a native transfer transaction.
     #[cfg(test)]
-    pub fn new_transfer<A: Into<U512>, T: Into<TransferTarget>>(
+    pub(crate) fn new_transfer<A: Into<U512>, T: Into<TransferTarget>>(
         amount: A,
         maybe_source: Option<URef>,
         target: T,
@@ -193,7 +193,7 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Returns a new `TransactionV1Builder` suitable for building a native add_bid transaction.
     #[cfg(test)]
-    pub fn new_add_bid<A: Into<U512>>(
+    pub(crate) fn new_add_bid<A: Into<U512>>(
         public_key: PublicKey,
         delegation_rate: u8,
         amount: A,
@@ -220,7 +220,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Returns a new `TransactionV1Builder` suitable for building a native withdraw_bid
     /// transaction.
     #[cfg(test)]
-    pub fn new_withdraw_bid<A: Into<U512>>(
+    pub(crate) fn new_withdraw_bid<A: Into<U512>>(
         public_key: PublicKey,
         amount: A,
     ) -> Result<Self, CLValueError> {
@@ -235,7 +235,7 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Returns a new `TransactionV1Builder` suitable for building a native delegate transaction.
     #[cfg(test)]
-    pub fn new_delegate<A: Into<U512>>(
+    pub(crate) fn new_delegate<A: Into<U512>>(
         delegator: PublicKey,
         validator: PublicKey,
         amount: A,
@@ -251,7 +251,7 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Returns a new `TransactionV1Builder` suitable for building a native undelegate transaction.
     #[cfg(test)]
-    pub fn new_undelegate<A: Into<U512>>(
+    pub(crate) fn new_undelegate<A: Into<U512>>(
         delegator: PublicKey,
         validator: PublicKey,
         amount: A,
@@ -266,7 +266,7 @@ impl<'a> TransactionV1Builder<'a> {
     }
 
     #[cfg(test)]
-    fn new_targeting_stored<E: Into<String>>(
+    pub(crate) fn new_targeting_stored<E: Into<String>>(
         id: TransactionInvocationTarget,
         entry_point: E,
         runtime: TransactionRuntimeParams,
@@ -283,7 +283,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Returns a new `TransactionV1Builder` suitable for building a transaction targeting a stored
     /// entity.
     #[cfg(test)]
-    pub fn new_targeting_invocable_entity<E: Into<String>>(
+    pub(crate) fn new_targeting_invocable_entity<E: Into<String>>(
         hash: AddressableEntityHash,
         entry_point: E,
         runtime: TransactionRuntimeParams,
@@ -295,7 +295,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Returns a new `TransactionV1Builder` suitable for building a transaction targeting a stored
     /// entity via its alias.
     #[cfg(test)]
-    pub fn new_targeting_invocable_entity_via_alias<A: Into<String>, E: Into<String>>(
+    pub(crate) fn new_targeting_invocable_entity_via_alias<A: Into<String>, E: Into<String>>(
         alias: A,
         entry_point: E,
         runtime: TransactionRuntimeParams,
@@ -307,7 +307,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Returns a new `TransactionV1Builder` suitable for building a transaction targeting a
     /// package.
     #[cfg(test)]
-    pub fn new_targeting_package<E: Into<String>>(
+    pub(crate) fn new_targeting_package<E: Into<String>>(
         hash: PackageHash,
         version: Option<EntityVersion>,
         entry_point: E,
@@ -320,7 +320,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Returns a new `TransactionV1Builder` suitable for building a transaction targeting a
     /// package via its alias.
     #[cfg(test)]
-    pub fn new_targeting_package_via_alias<A: Into<String>, E: Into<String>>(
+    pub(crate) fn new_targeting_package_via_alias<A: Into<String>, E: Into<String>>(
         alias: A,
         version: Option<EntityVersion>,
         entry_point: E,
@@ -332,7 +332,7 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Returns a new `TransactionV1Builder` suitable for building a transaction for running session
     /// logic, i.e. compiled Wasm.
-    pub fn new_session(
+    pub(crate) fn new_session(
         is_install_upgrade: bool,
         module_bytes: Bytes,
         runtime: TransactionRuntimeParams,
@@ -357,7 +357,7 @@ impl<'a> TransactionV1Builder<'a> {
     ///   * unsigned by calling `with_no_secret_key`
     ///   * given an invalid approval by calling `with_invalid_approval`
     #[cfg(test)]
-    pub fn new_random(rng: &mut TestRng) -> Self {
+    pub(crate) fn new_random(rng: &mut TestRng) -> Self {
         let secret_key = SecretKey::random(rng);
         let ttl_millis = rng.gen_range(60_000..TransactionConfig::default().max_ttl.millis());
         let fields = FieldsContainer::random(rng);
@@ -384,7 +384,7 @@ impl<'a> TransactionV1Builder<'a> {
     }
 
     #[cfg(test)]
-    pub fn new_random_with_category_and_timestamp_and_ttl(
+    pub(crate) fn new_random_with_category_and_timestamp_and_ttl(
         rng: &mut TestRng,
         lane: u8,
         timestamp: Option<Timestamp>,
@@ -426,7 +426,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Sets the `chain_name` in the transaction.
     ///
     /// Must be provided or building will fail.
-    pub fn with_chain_name<C: Into<String>>(mut self, chain_name: C) -> Self {
+    pub(crate) fn with_chain_name<C: Into<String>>(mut self, chain_name: C) -> Self {
         self.chain_name = Some(chain_name.into());
         self
     }
@@ -434,7 +434,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Sets the `timestamp` in the transaction.
     ///
     /// If not provided, the timestamp will be set to the time when the builder was constructed.
-    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+    pub(crate) fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = timestamp;
         self
     }
@@ -442,7 +442,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// Sets the `ttl` (time-to-live) in the transaction.
     ///
     /// If not provided, the ttl will be set to [`Self::DEFAULT_TTL`].
-    pub fn with_ttl(mut self, ttl: TimeDiff) -> Self {
+    pub(crate) fn with_ttl(mut self, ttl: TimeDiff) -> Self {
         self.ttl = ttl;
         self
     }
@@ -451,7 +451,7 @@ impl<'a> TransactionV1Builder<'a> {
     ///
     /// If not provided, the pricing mode will be set to [`Self::DEFAULT_PRICING_MODE`].
     #[cfg(test)]
-    pub fn with_pricing_mode(mut self, pricing_mode: PricingMode) -> Self {
+    pub(crate) fn with_pricing_mode(mut self, pricing_mode: PricingMode) -> Self {
         self.pricing_mode = pricing_mode;
         self
     }
@@ -461,7 +461,7 @@ impl<'a> TransactionV1Builder<'a> {
     /// If not provided, the public key derived from the secret key used in the builder will be
     /// used as the `InitiatorAddr::PublicKey` in the transaction.
     #[cfg(test)]
-    pub fn with_initiator_addr<I: Into<InitiatorAddr>>(mut self, initiator_addr: I) -> Self {
+    pub(crate) fn with_initiator_addr<I: Into<InitiatorAddr>>(mut self, initiator_addr: I) -> Self {
         self.initiator_addr = Some(initiator_addr.into());
         self
     }
@@ -470,7 +470,7 @@ impl<'a> TransactionV1Builder<'a> {
     ///
     /// If not provided, the transaction can still be built, but will be unsigned and will be
     /// invalid until subsequently signed.
-    pub fn with_secret_key(mut self, secret_key: &'a SecretKey) -> Self {
+    pub(crate) fn with_secret_key(mut self, secret_key: &'a SecretKey) -> Self {
         #[cfg(not(test))]
         {
             self.secret_key = Some(secret_key);
@@ -487,7 +487,10 @@ impl<'a> TransactionV1Builder<'a> {
 
     /// Manually sets additional fields
     #[cfg(test)]
-    pub fn with_additional_fields(mut self, additional_fields: BTreeMap<u16, Bytes>) -> Self {
+    pub(crate) fn with_additional_fields(
+        mut self,
+        additional_fields: BTreeMap<u16, Bytes>,
+    ) -> Self {
         self.additional_fields = additional_fields;
         self
     }
@@ -497,15 +500,24 @@ impl<'a> TransactionV1Builder<'a> {
     /// NOTE: this overwrites any existing runtime args.  To append to existing args, use
     /// [`TransactionV1Builder::with_runtime_arg`].
     #[cfg(test)]
-    pub fn with_runtime_args(mut self, args: RuntimeArgs) -> Self {
+    pub(crate) fn with_runtime_args(mut self, args: RuntimeArgs) -> Self {
         self.args = TransactionArgs::Named(args);
+        self
+    }
+
+    /// Sets the transaction args in the transaction.
+    ///
+    /// NOTE: this overwrites any existing transaction_args args.
+    #[cfg(test)]
+    pub fn with_transaction_args(mut self, args: TransactionArgs) -> Self {
+        self.args = args;
         self
     }
 
     /// Returns the new transaction, or an error if non-defaulted fields were not set.
     ///
     /// For more info, see [the `TransactionBuilder` documentation](TransactionV1Builder).
-    pub fn build(self) -> Result<TransactionV1, TransactionV1BuilderError> {
+    pub(crate) fn build(self) -> Result<TransactionV1, TransactionV1BuilderError> {
         self.do_build()
     }
 

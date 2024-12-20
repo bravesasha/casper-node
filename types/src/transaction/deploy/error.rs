@@ -138,6 +138,9 @@ pub enum InvalidDeploy {
 
     /// Invalid runtime.
     InvalidRuntime,
+
+    //Invalida chainspec configuration - seems that chainspec has no wasm lanes defined
+    ChainspecHasNoWasmLanesDefined,
 }
 
 impl Display for InvalidDeploy {
@@ -266,6 +269,7 @@ impl Display for InvalidDeploy {
             InvalidDeploy::InvalidRuntime => {
                 write!(formatter, "invalid runtime",)
             }
+            InvalidDeploy::ChainspecHasNoWasmLanesDefined => write!(formatter, "chainspec didnt have any wasm lanes defined which is required for wasm based deploys",),
         }
     }
 }
@@ -302,7 +306,8 @@ impl StdError for InvalidDeploy {
             | InvalidDeploy::GasLimitNotSupported
             | InvalidDeploy::UnableToCalculateGasCost
             | InvalidDeploy::GasPriceToleranceTooLow { .. }
-            | InvalidDeploy::InvalidRuntime => None,
+            | InvalidDeploy::InvalidRuntime
+            | InvalidDeploy::ChainspecHasNoWasmLanesDefined => None,
         }
     }
 }

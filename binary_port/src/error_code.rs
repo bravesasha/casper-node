@@ -268,9 +268,9 @@ pub enum ErrorCode {
     /// Entry point cannot be 'call'
     #[error("entry point cannot be 'call'")]
     InvalidTransactionEntryPointCannotBeCall = 83,
-    /// Invalid transaction kind
-    #[error("invalid transaction kind")]
-    InvalidTransactionInvalidTransactionKind = 84,
+    /// Invalid transaction lane
+    #[error("invalid transaction lane")]
+    InvalidTransactionInvalidTransactionLane = 84,
     /// Gas price tolerance too low
     #[error("gas price tolerance too low")]
     GasPriceToleranceTooLow = 85,
@@ -307,6 +307,36 @@ pub enum ErrorCode {
     /// Malformed binary request
     #[error("malformed binary request")]
     MalformedBinaryRequest = 96,
+    /// No matching lane for transaction
+    #[error("couldn't associate a transaction lane with the transaction")]
+    InvalidTransactionNoWasmLaneMatches = 97,
+    /// Entry point must be 'call'
+    #[error("entry point must be 'call'")]
+    InvalidTransactionEntryPointMustBeCall = 98,
+    /// One of the payloads field cannot be deserialized
+    #[error("One of the payloads field cannot be deserialized")]
+    InvalidTransactionCannotDeserializeField = 99,
+    /// Can't calculate hash of the payload fields
+    #[error("Can't calculate hash of the payload fields")]
+    InvalidTransactionCannotCalculateFieldsHash = 100,
+    /// Unexpected fields in payload
+    #[error("Unexpected fields in payload")]
+    InvalidTransactionUnexpectedFields = 101,
+    /// Expected bytes arguments
+    #[error("expected bytes arguments")]
+    InvalidTransactionExpectedBytesArguments = 102,
+    /// Missing seed field in transaction
+    #[error("Missing seed field in transaction")]
+    InvalidTransactionMissingSeed = 103,
+    /// Pricing mode not supported
+    #[error("Pricing mode not supported")]
+    PricingModeNotSupported = 104,
+    /// Gas limit not supported
+    #[error("Gas limit not supported")]
+    InvalidDeployGasLimitNotSupported = 105,
+    /// Invalid runtime for Transaction::Deploy
+    #[error("Invalid runtime for Transaction::Deploy")]
+    InvalidDeployInvalidRuntime = 106,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -398,7 +428,7 @@ impl TryFrom<u16> for ErrorCode {
             81 => Ok(ErrorCode::DeployMissingTransferTarget),
             82 => Ok(ErrorCode::DeployMissingModuleBytes),
             83 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCall),
-            84 => Ok(ErrorCode::InvalidTransactionInvalidTransactionKind),
+            84 => Ok(ErrorCode::InvalidTransactionInvalidTransactionLane),
             85 => Ok(ErrorCode::GasPriceToleranceTooLow),
             86 => Ok(ErrorCode::ReceivedV1Transaction),
             87 => Ok(ErrorCode::PurseNotFound),
@@ -411,6 +441,16 @@ impl TryFrom<u16> for ErrorCode {
             94 => Ok(ErrorCode::MalformedProtocolVersion),
             95 => Ok(ErrorCode::MalformedBinaryRequestHeader),
             96 => Ok(ErrorCode::MalformedBinaryRequest),
+            97 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
+            98 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCall),
+            99 => Ok(ErrorCode::InvalidTransactionCannotDeserializeField),
+            100 => Ok(ErrorCode::InvalidTransactionCannotCalculateFieldsHash),
+            101 => Ok(ErrorCode::InvalidTransactionUnexpectedFields),
+            102 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
+            103 => Ok(ErrorCode::InvalidTransactionMissingSeed),
+            104 => Ok(ErrorCode::PricingModeNotSupported),
+            105 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
+            106 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
             _ => Err(UnknownErrorCode),
         }
     }
@@ -482,6 +522,8 @@ impl From<InvalidDeploy> for ErrorCode {
                 ErrorCode::InvalidDeployUnableToCalculateGasCost
             }
             InvalidDeploy::GasPriceToleranceTooLow { .. } => ErrorCode::GasPriceToleranceTooLow,
+            InvalidDeploy::GasLimitNotSupported => ErrorCode::InvalidDeployGasLimitNotSupported,
+            InvalidDeploy::InvalidRuntime => ErrorCode::InvalidDeployInvalidRuntime,
             _ => ErrorCode::InvalidDeployUnspecified,
         }
     }
@@ -544,7 +586,7 @@ impl From<InvalidTransactionV1> for ErrorCode {
                 ErrorCode::InvalidTransactionEntryPointCannotBeCall
             }
             InvalidTransactionV1::InvalidTransactionLane(_) => {
-                ErrorCode::InvalidTransactionInvalidTransactionKind
+                ErrorCode::InvalidTransactionInvalidTransactionLane
             }
             InvalidTransactionV1::GasPriceToleranceTooLow { .. } => {
                 ErrorCode::GasPriceToleranceTooLow
@@ -553,6 +595,26 @@ impl From<InvalidTransactionV1> for ErrorCode {
             InvalidTransactionV1::InvalidTransactionRuntime { .. } => {
                 ErrorCode::InvalidTransactionRuntime
             }
+            InvalidTransactionV1::NoWasmLaneMatchesTransaction() => {
+                ErrorCode::InvalidTransactionNoWasmLaneMatches
+            }
+            InvalidTransactionV1::EntryPointMustBeCall { .. } => {
+                ErrorCode::InvalidTransactionEntryPointMustBeCall
+            }
+            InvalidTransactionV1::CouldNotDeserializeField { .. } => {
+                ErrorCode::InvalidTransactionCannotDeserializeField
+            }
+            InvalidTransactionV1::CannotCalculateFieldsHash => {
+                ErrorCode::InvalidTransactionCannotCalculateFieldsHash
+            }
+            InvalidTransactionV1::UnexpectedTransactionFieldEntries => {
+                ErrorCode::InvalidTransactionUnexpectedFields
+            }
+            InvalidTransactionV1::ExpectedBytesArguments => {
+                ErrorCode::InvalidTransactionExpectedBytesArguments
+            }
+            InvalidTransactionV1::MissingSeed => ErrorCode::InvalidTransactionMissingSeed,
+            InvalidTransactionV1::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }

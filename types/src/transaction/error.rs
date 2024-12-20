@@ -16,7 +16,7 @@ pub use crate::transaction::transaction_v1::InvalidTransactionV1;
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[non_exhaustive]
 pub enum InvalidTransaction {
-    /// Legacy deploys.
+    /// Deploys.
     Deploy(InvalidDeploy),
     /// V1 transactions.
     V1(InvalidTransactionV1),

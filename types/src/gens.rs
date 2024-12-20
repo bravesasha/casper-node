@@ -978,7 +978,7 @@ pub fn stored_value_arb() -> impl Strategy<Value = StoredValue> {
         contract_package_arb().prop_map(StoredValue::ContractPackage),
         addressable_entity_arb().prop_map(StoredValue::AddressableEntity),
         package_arb().prop_map(StoredValue::SmartContract),
-        transfer_v1_arb().prop_map(StoredValue::LegacyTransfer),
+        transfer_v1_arb().prop_map(StoredValue::Transfer),
         deploy_info_arb().prop_map(StoredValue::DeployInfo),
         era_info_arb(1..10).prop_map(StoredValue::EraInfo),
         unified_bid_arb(0..3).prop_map(StoredValue::BidKind),
@@ -1002,7 +1002,7 @@ pub fn stored_value_arb() -> impl Strategy<Value = StoredValue> {
                 StoredValue::ContractWasm(_) => stored_value,
                 StoredValue::Contract(_) => stored_value,
                 StoredValue::ContractPackage(_) => stored_value,
-                StoredValue::LegacyTransfer(_) => stored_value,
+                StoredValue::Transfer(_) => stored_value,
                 StoredValue::DeployInfo(_) => stored_value,
                 StoredValue::EraInfo(_) => stored_value,
                 StoredValue::Bid(_) => stored_value,
@@ -1015,7 +1015,7 @@ pub fn stored_value_arb() -> impl Strategy<Value = StoredValue> {
                 StoredValue::MessageTopic(_) => stored_value,
                 StoredValue::Message(_) => stored_value,
                 StoredValue::NamedKey(_) => stored_value,
-                StoredValue::Prepaid(_) => stored_value,
+                StoredValue::Prepayment(_) => stored_value,
                 StoredValue::EntryPoint(_) => stored_value,
                 StoredValue::RawBytes(_) => stored_value,
         })
@@ -1293,11 +1293,6 @@ pub fn pricing_mode_arb() -> impl Strategy<Value = PricingMode> {
             }
         ),
         fixed_pricing_mode_arb(),
-        u8_slice_32().prop_map(|receipt| {
-            PricingMode::Prepaid {
-                receipt: receipt.into(),
-            }
-        }),
     ]
 }
 

@@ -134,4 +134,18 @@ mod tests {
         let val = Peers::random(rng);
         bytesrepr::test_serialization_roundtrip(&val);
     }
+
+    #[test]
+    fn bytesrepr_empty_roundtrip() {
+        let val = Peers(vec![]);
+        bytesrepr::test_serialization_roundtrip(&val);
+    }
+
+    #[test]
+    fn bytesrepr_empty_vec_should_have_count_0() {
+        let val = Peers(vec![]);
+        let x = Peers::to_bytes(&val).expect("should have vec");
+        let (count, _) = u32::from_bytes(&x).expect("should have count");
+        assert!(count == 0, "count should be 0");
+    }
 }

@@ -180,7 +180,7 @@ block_max_approval_count = 2600
 # Maximum block size in bytes including transactions contained by the block.  0 means unlimited.
 max_block_size = 5_242_880
 # The upper limit of total gas of all transactions in a block.
-block_gas_limit = 200_000_000_000
+block_gas_limit = 1_625_000_000_000
 # The minimum amount in motes for a valid native transfer.
 native_transfer_minimum_motes = 2_500_000_000
 # The maximum value to which `transaction_acceptor.timestamp_leeway` can be set in the config.toml file.
@@ -206,9 +206,12 @@ vm_casper_v2 = false
 # [3] -> Transaction gas limit size in bytes for a given transaction in a certain lane
 # [4] -> The maximum number of transactions the lane can contain
 native_mint_lane = [0, 2048, 1024, 2_500_000_000, 650]
-native_auction_lane = [1, 3096, 2048, 2_500_000_000, 145]
-install_upgrade_lane = [2, 1_048_576, 2048, 100_000_000_000, 1]
-wasm_lanes = [[3, 344_064, 1024, 100_000_000_000, 3], [4, 172_032, 1024, 50_000_000_000, 7], [5, 12_288, 512, 2_500_000_000, 25]]
+native_auction_lane = [1, 3096, 2048, 2_500_000_000, 650]
+install_upgrade_lane = [2, 750_000, 2048, 100_000_000_000, 1]
+wasm_lanes = [
+    [3, 262_144, 1024, 100_000_000_000, 1],
+    [4, 131_072, 1024, 50_000_000_000, 2],
+    [5, 16_384, 512, 2_500_000_000, 80]]
 
 [transactions.deploy]
 # The maximum number of Motes allowed to be spent during payment.  0 means unlimited.
@@ -230,56 +233,56 @@ gas_per_byte = 1_117_587
 
 [wasm.v1.opcode_costs]
 # Bit operations multiplier.
-bit = 35
+bit = 105
 # Arithmetic add operations multiplier.
-add = 35
+add = 105
 # Mul operations multiplier.
-mul = 35
+mul = 105
 # Div operations multiplier.
-div = 35
+div = 105
 # Memory load operation multiplier.
-load = 35
+load = 105
 # Memory store operation multiplier.
-store = 35
+store = 105
 # Const store operation multiplier.
-const = 35
+const = 105
 # Local operations multiplier.
-local = 35
+local = 105
 # Global operations multiplier.
-global = 35
+global = 105
 # Integer operations multiplier.
-integer_comparison = 35
+integer_comparison = 105
 # Conversion operations multiplier.
-conversion = 35
+conversion = 105
 # Unreachable operation multiplier.
-unreachable = 35
+unreachable = 105
 # Nop operation multiplier.
-nop = 35
+nop = 105
 # Get current memory operation multiplier.
-current_memory = 35
-# Grow memory cost, per page (64kb).
-grow_memory = 300
+current_memory = 105
+# Grow memory cost, per page (192kb).
+grow_memory = 900
 # Sign extension operations cost
-sign = 35
+sign = 105
 
 # Control flow operations multiplier.
 [wasm.v1.opcode_costs.control_flow]
-block = 85
-loop = 85
-if = 35
-else = 35
-end = 35
-br = 555
-br_if = 170
-return = 35
-select = 35
-call = 75
-call_indirect = 90
-drop = 35
+block = 255
+loop = 255
+if = 105
+else = 105
+end = 105
+br = 1665
+br_if = 510
+return = 105
+select = 105
+call = 225
+call_indirect = 270
+drop = 105
 
 [wasm.v1.opcode_costs.control_flow.br_table]
 # Fixed cost per `br_table` opcode
-cost = 50
+cost = 150
 # Size of target labels in the `br_table` opcode will be multiplied by `size_multiplier`
 size_multiplier = 100
 

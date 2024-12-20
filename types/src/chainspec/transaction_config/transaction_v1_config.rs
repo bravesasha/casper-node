@@ -35,10 +35,10 @@ const TRANSACTION_COUNT_INDEX: usize = 4;
 /// Structured limits imposed on a transaction lane
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-pub struct TransactionLimitsDefinition {
+pub struct TransactionLaneDefinition {
     /// The lane identifier
     pub id: u8,
-    /// The maximum length of a transaction i bytes
+    /// The maximum length of a transaction in bytes
     pub max_transaction_length: u64,
     /// The maximum number of runtime args
     pub max_transaction_args_length: u64,
@@ -48,14 +48,14 @@ pub struct TransactionLimitsDefinition {
     pub max_transaction_count: u64,
 }
 
-impl TryFrom<Vec<u64>> for TransactionLimitsDefinition {
+impl TryFrom<Vec<u64>> for TransactionLaneDefinition {
     type Error = TransactionConfigError;
 
     fn try_from(v: Vec<u64>) -> Result<Self, Self::Error> {
         if v.len() != 5 {
             return Err(TransactionConfigError::InvalidArgsProvided);
         }
-        Ok(TransactionLimitsDefinition {
+        Ok(TransactionLaneDefinition {
             id: v[TRANSACTION_ID_INDEX] as u8,
             max_transaction_length: v[TRANSACTION_LENGTH_INDEX],
             max_transaction_args_length: v[TRANSACTION_ARGS_LENGTH_INDEX],
@@ -65,7 +65,7 @@ impl TryFrom<Vec<u64>> for TransactionLimitsDefinition {
     }
 }
 
-impl TransactionLimitsDefinition {
+impl TransactionLaneDefinition {
     /// Creates a new instance of TransactionLimitsDefinition
     pub fn new(
         id: u8,
@@ -135,32 +135,39 @@ pub struct TransactionV1Config {
         deserialize_with = "vec_to_limit_definition"
     )]
     /// Lane configuration of the native mint interaction.
-    pub native_mint_lane: TransactionLimitsDefinition,
+    pub native_mint_lane: TransactionLaneDefinition,
     #[serde(
         serialize_with = "limit_definition_to_vec",
         deserialize_with = "vec_to_limit_definition"
     )]
     /// Lane configuration for the native auction interaction.
-    pub native_auction_lane: TransactionLimitsDefinition,
+    pub native_auction_lane: TransactionLaneDefinition,
     #[serde(
         serialize_with = "limit_definition_to_vec",
         deserialize_with = "vec_to_limit_definition"
     )]
     /// Lane configuration for the install/upgrade interaction.
-    pub install_upgrade_lane: TransactionLimitsDefinition,
+    pub install_upgrade_lane: TransactionLaneDefinition,
     #[serde(
         serialize_with = "wasm_definitions_to_vec",
         deserialize_with = "definition_to_wasms"
     )]
     /// Lane configurations for Wasm based lanes that are not declared as install/upgrade.
-    pub wasm_lanes: Vec<TransactionLimitsDefinition>,
+    wasm_lanes: Vec<TransactionLaneDefinition>,
     #[cfg_attr(any(all(feature = "std", feature = "once_cell"), test), serde(skip))]
     #[cfg_attr(
         all(any(feature = "once_cell", test), feature = "datasize"),
         data_size(skip)
     )]
     #[cfg(any(feature = "once_cell", test))]
-    wasm_lanes_ordered_by_transaction_size: OnceCell<Vec<TransactionLimitsDefinition>>,
+    wasm_lanes_ordered_by_transaction_size: OnceCell<Vec<TransactionLaneDefinition>>,
+    #[cfg_attr(any(all(feature = "std", feature = "once_cell"), test), serde(skip))]
+    #[cfg_attr(
+        all(any(feature = "once_cell", test), feature = "datasize"),
+        data_size(skip)
+    )]
+    #[cfg(any(feature = "once_cell", test))]
+    wasm_lanes_ordered_by_transaction_gas_limit: OnceCell<Vec<TransactionLaneDefinition>>,
 }
 
 impl PartialEq for TransactionV1Config {
@@ -173,6 +180,8 @@ impl PartialEq for TransactionV1Config {
             wasm_lanes,
             #[cfg(any(feature = "once_cell", test))]
                 wasm_lanes_ordered_by_transaction_size: _,
+            #[cfg(any(feature = "once_cell", test))]
+                wasm_lanes_ordered_by_transaction_gas_limit: _,
         } = self;
         *native_mint_lane == other.native_mint_lane
             && *native_auction_lane == other.native_auction_lane
@@ -184,14 +193,18 @@ impl PartialEq for TransactionV1Config {
 impl TransactionV1Config {
     /// Cretaes a new instance of TransactionV1Config
     pub fn new(
-        native_mint_lane: TransactionLimitsDefinition,
-        native_auction_lane: TransactionLimitsDefinition,
-        install_upgrade_lane: TransactionLimitsDefinition,
-        wasm_lanes: Vec<TransactionLimitsDefinition>,
+        native_mint_lane: TransactionLaneDefinition,
+        native_auction_lane: TransactionLaneDefinition,
+        install_upgrade_lane: TransactionLaneDefinition,
+        wasm_lanes: Vec<TransactionLaneDefinition>,
     ) -> Self {
         #[cfg(any(feature = "once_cell", test))]
         let wasm_lanes_ordered_by_transaction_size = OnceCell::with_value(
             Self::build_wasm_lanes_ordered_by_transaction_size(wasm_lanes.clone()),
+        );
+        #[cfg(any(feature = "once_cell", test))]
+        let wasm_lanes_ordered_by_transaction_gas_limit = OnceCell::with_value(
+            Self::build_wasm_lanes_ordered_by_transaction_gas_limit(wasm_lanes.clone()),
         );
         TransactionV1Config {
             native_mint_lane,
@@ -200,6 +213,8 @@ impl TransactionV1Config {
             wasm_lanes,
             #[cfg(any(feature = "once_cell", test))]
             wasm_lanes_ordered_by_transaction_size,
+            #[cfg(any(feature = "once_cell", test))]
+            wasm_lanes_ordered_by_transaction_gas_limit,
         }
     }
 
@@ -354,13 +369,13 @@ impl TransactionV1Config {
 
     /// Returns a wasm lane id based on the transaction size adjusted by
     /// maybe_additional_computation_factor if necessary.
-    pub fn get_wasm_lane_id(
+    pub fn get_wasm_lane_id_by_size(
         &self,
         transaction_size: u64,
         additional_computation_factor: u8,
     ) -> Option<u8> {
         let mut maybe_adequate_lane_index = None;
-        let buckets = self.get_wasm_lanes_ordered();
+        let buckets = self.get_wasm_lanes_ordered_by_transaction_size();
         let number_of_lanes = buckets.len();
         for (i, lane) in buckets.iter().enumerate() {
             let lane_size = lane.max_transaction_length;
@@ -378,10 +393,28 @@ impl TransactionV1Config {
         maybe_adequate_lane_index.map(|index| buckets[index].id)
     }
 
+    pub fn get_wasm_lane_id_by_payment_limited(
+        &self,
+        gas_limit: u64,
+        transaction_size: u64,
+    ) -> Option<u8> {
+        let mut maybe_adequate_lane_index = None;
+        let lanes = self.get_wasm_lanes_ordered_by_gas_limit();
+        for (i, lane) in lanes.iter().enumerate() {
+            let max_transaction_gas = lane.max_transaction_gas_limit;
+            let max_transaction_size = lane.max_transaction_length;
+            if max_transaction_gas >= gas_limit && max_transaction_size >= transaction_size {
+                maybe_adequate_lane_index = Some(i);
+                break;
+            }
+        }
+        maybe_adequate_lane_index.map(|index| lanes[index].id)
+    }
+
     #[allow(unreachable_code)]
     //We're allowing unreachable code here because there's a possibility that someone might
     // want to use the types crate without once_cell
-    fn get_wasm_lanes_ordered(&self) -> &Vec<TransactionLimitsDefinition> {
+    fn get_wasm_lanes_ordered_by_transaction_size(&self) -> &Vec<TransactionLaneDefinition> {
         #[cfg(any(feature = "once_cell", test))]
         return self.wasm_lanes_ordered_by_transaction_size.get_or_init(|| {
             Self::build_wasm_lanes_ordered_by_transaction_size(self.wasm_lanes.clone())
@@ -389,13 +422,57 @@ impl TransactionV1Config {
         &Self::build_wasm_lanes_ordered_by_transaction_size(self.wasm_lanes.clone())
     }
 
+    #[allow(unreachable_code)]
+    //We're allowing unreachable code here because there's a possibility that someone might
+    // want to use the types crate without once_cell
+    fn get_wasm_lanes_ordered_by_gas_limit(&self) -> &Vec<TransactionLaneDefinition> {
+        #[cfg(any(feature = "once_cell", test))]
+        return self
+            .wasm_lanes_ordered_by_transaction_gas_limit
+            .get_or_init(|| {
+                Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone())
+            });
+        &Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone())
+    }
+
+    fn build_wasm_lanes_ordered_by_transaction_gas_limit(
+        wasm_lanes: Vec<TransactionLaneDefinition>,
+    ) -> Vec<TransactionLaneDefinition> {
+        let mut ordered = wasm_lanes;
+        ordered.sort_by(|a, b| {
+            a.max_transaction_gas_limit
+                .cmp(&b.max_transaction_gas_limit)
+        });
+        ordered
+    }
+
     fn build_wasm_lanes_ordered_by_transaction_size(
-        wasm_lanes: Vec<TransactionLimitsDefinition>,
-    ) -> Vec<TransactionLimitsDefinition> {
-        let mut wasm_lanes_ordered_by_transaction_size = wasm_lanes;
-        wasm_lanes_ordered_by_transaction_size
-            .sort_by(|a, b| a.max_transaction_length.cmp(&b.max_transaction_length));
-        wasm_lanes_ordered_by_transaction_size
+        wasm_lanes: Vec<TransactionLaneDefinition>,
+    ) -> Vec<TransactionLaneDefinition> {
+        let mut ordered = wasm_lanes;
+        ordered.sort_by(|a, b| a.max_transaction_length.cmp(&b.max_transaction_length));
+        ordered
+    }
+
+    pub fn wasm_lanes(&self) -> &Vec<TransactionLaneDefinition> {
+        &self.wasm_lanes
+    }
+
+    #[cfg(any(feature = "testing", test))]
+    pub fn set_wasm_lanes(&mut self, wasm_lanes: Vec<TransactionLaneDefinition>) {
+        self.wasm_lanes = wasm_lanes;
+        #[cfg(any(feature = "once_cell", test))]
+        {
+            let wasm_lanes_ordered_by_transaction_size = OnceCell::with_value(
+                Self::build_wasm_lanes_ordered_by_transaction_size(self.wasm_lanes.clone()),
+            );
+            self.wasm_lanes_ordered_by_transaction_size = wasm_lanes_ordered_by_transaction_size;
+            let wasm_lanes_ordered_by_transaction_gas_limit = OnceCell::with_value(
+                Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone()),
+            );
+            self.wasm_lanes_ordered_by_transaction_gas_limit =
+                wasm_lanes_ordered_by_transaction_gas_limit;
+        }
     }
 }
 
@@ -414,7 +491,7 @@ impl Default for TransactionV1Config {
         let native_auction_lane = DEFAULT_NATIVE_AUCTION_LANE.to_vec();
         let install_upgrade_lane = DEFAULT_INSTALL_UPGRADE_LANE.to_vec();
         let raw_wasm_lanes = vec![wasm_lane];
-        let wasm_lanes: Result<Vec<TransactionLimitsDefinition>, _> =
+        let wasm_lanes: Result<Vec<TransactionLaneDefinition>, _> =
             raw_wasm_lanes.into_iter().map(|v| v.try_into()).collect();
 
         TransactionV1Config::new(
@@ -434,7 +511,7 @@ impl ToBytes for TransactionV1Config {
         let wasm_lanes_as_vecs: Vec<Vec<u64>> = self
             .wasm_lanes
             .iter()
-            .map(TransactionLimitsDefinition::as_vec)
+            .map(TransactionLaneDefinition::as_vec)
             .collect();
         wasm_lanes_as_vecs.write_bytes(writer)
     }
@@ -449,7 +526,7 @@ impl ToBytes for TransactionV1Config {
         let wasm_lanes_as_vecs: Vec<Vec<u64>> = self
             .wasm_lanes
             .iter()
-            .map(TransactionLimitsDefinition::as_vec)
+            .map(TransactionLaneDefinition::as_vec)
             .collect();
         self.native_mint_lane.as_vec().serialized_length()
             + self.native_auction_lane.as_vec().serialized_length()
@@ -475,7 +552,7 @@ impl FromBytes for TransactionV1Config {
         let install_upgrade_lane = raw_install_upgrade_lane
             .try_into()
             .map_err(|_| bytesrepr::Error::Formatting)?;
-        let wasm_lanes: Result<Vec<TransactionLimitsDefinition>, _> =
+        let wasm_lanes: Result<Vec<TransactionLaneDefinition>, _> =
             raw_wasm_lanes.into_iter().map(|v| v.try_into()).collect();
         let config = TransactionV1Config::new(
             native_mint_lane,
@@ -487,12 +564,12 @@ impl FromBytes for TransactionV1Config {
     }
 }
 
-fn vec_to_limit_definition<'de, D>(deserializer: D) -> Result<TransactionLimitsDefinition, D::Error>
+fn vec_to_limit_definition<'de, D>(deserializer: D) -> Result<TransactionLaneDefinition, D::Error>
 where
     D: Deserializer<'de>,
 {
     let vec = Vec::<u64>::deserialize(deserializer)?;
-    let limits = TransactionLimitsDefinition::try_from(vec).map_err(|_| {
+    let limits = TransactionLaneDefinition::try_from(vec).map_err(|_| {
         D::Error::invalid_value(
             Unexpected::Seq,
             &"expected 5 u64 compliant numbers to create a TransactionLimitsDefinition",
@@ -502,7 +579,7 @@ where
 }
 
 fn limit_definition_to_vec<S>(
-    limits: &TransactionLimitsDefinition,
+    limits: &TransactionLaneDefinition,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -516,14 +593,12 @@ where
     seq.end()
 }
 
-fn definition_to_wasms<'de, D>(
-    deserializer: D,
-) -> Result<Vec<TransactionLimitsDefinition>, D::Error>
+fn definition_to_wasms<'de, D>(deserializer: D) -> Result<Vec<TransactionLaneDefinition>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let vec = Vec::<Vec<u64>>::deserialize(deserializer)?;
-    let result: Result<Vec<TransactionLimitsDefinition>, TransactionConfigError> =
+    let result: Result<Vec<TransactionLaneDefinition>, TransactionConfigError> =
         vec.into_iter().map(|v| v.try_into()).collect();
     result.map_err(|_| {
         D::Error::invalid_value(
@@ -534,7 +609,7 @@ where
 }
 
 fn wasm_definitions_to_vec<S>(
-    limits: &[TransactionLimitsDefinition],
+    limits: &[TransactionLaneDefinition],
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -579,20 +654,20 @@ mod tests {
     #[test]
     fn should_get_configuration_for_wasm() {
         let config = build_example_transaction_config();
-        let got = config.get_wasm_lane_id(100, 0);
+        let got = config.get_wasm_lane_id_by_size(100, 0);
         assert_eq!(got, Some(3));
         let config = build_example_transaction_config_reverse_wasm_ids();
-        let got = config.get_wasm_lane_id(100, 0);
+        let got = config.get_wasm_lane_id_by_size(100, 0);
         assert_eq!(got, Some(5));
     }
 
     #[test]
     fn given_too_big_transaction_should_return_none() {
         let config = build_example_transaction_config();
-        let got = config.get_wasm_lane_id(100000000, 0);
+        let got = config.get_wasm_lane_id_by_size(100000000, 0);
         assert!(got.is_none());
         let config = build_example_transaction_config_reverse_wasm_ids();
-        let got = config.get_wasm_lane_id(100000000, 0);
+        let got = config.get_wasm_lane_id_by_size(100000000, 0);
         assert!(got.is_none());
     }
 
@@ -600,75 +675,180 @@ mod tests {
     fn given_wasm_should_return_first_fit() {
         let config = build_example_transaction_config();
 
-        let got = config.get_wasm_lane_id(660, 0);
+        let got = config.get_wasm_lane_id_by_size(660, 0);
         assert_eq!(got, Some(4));
 
-        let got = config.get_wasm_lane_id(800, 0);
+        let got = config.get_wasm_lane_id_by_size(800, 0);
         assert_eq!(got, Some(5));
 
-        let got = config.get_wasm_lane_id(1, 0);
+        let got = config.get_wasm_lane_id_by_size(1, 0);
         assert_eq!(got, Some(3));
 
         let config = build_example_transaction_config_reverse_wasm_ids();
 
-        let got = config.get_wasm_lane_id(660, 0);
+        let got = config.get_wasm_lane_id_by_size(660, 0);
         assert_eq!(got, Some(4));
 
-        let got = config.get_wasm_lane_id(800, 0);
+        let got = config.get_wasm_lane_id_by_size(800, 0);
         assert_eq!(got, Some(3));
 
-        let got = config.get_wasm_lane_id(1, 0);
+        let got = config.get_wasm_lane_id_by_size(1, 0);
         assert_eq!(got, Some(5));
     }
 
     #[test]
     fn given_additional_computation_factor_should_be_applied() {
         let config = build_example_transaction_config();
-        let got = config.get_wasm_lane_id(660, 1);
+        let got = config.get_wasm_lane_id_by_size(660, 1);
         assert_eq!(got, Some(5));
 
         let config = build_example_transaction_config_reverse_wasm_ids();
-        let got = config.get_wasm_lane_id(660, 1);
+        let got = config.get_wasm_lane_id_by_size(660, 1);
         assert_eq!(got, Some(3));
     }
 
     #[test]
     fn given_additional_computation_factor_should_not_overflow() {
         let config = build_example_transaction_config();
-        let got = config.get_wasm_lane_id(660, 2);
+        let got = config.get_wasm_lane_id_by_size(660, 2);
         assert_eq!(got, Some(5));
-        let got_2 = config.get_wasm_lane_id(660, 20);
+        let got_2 = config.get_wasm_lane_id_by_size(660, 20);
         assert_eq!(got_2, Some(5));
 
         let config = build_example_transaction_config_reverse_wasm_ids();
-        let got = config.get_wasm_lane_id(660, 2);
+        let got = config.get_wasm_lane_id_by_size(660, 2);
         assert_eq!(got, Some(3));
-        let got_2 = config.get_wasm_lane_id(660, 20);
+        let got_2 = config.get_wasm_lane_id_by_size(660, 20);
         assert_eq!(got_2, Some(3));
     }
 
     #[test]
     fn given_no_wasm_lanes_should_return_none() {
         let config = build_example_transaction_config_no_wasms();
-        let got = config.get_wasm_lane_id(660, 2);
+        let got = config.get_wasm_lane_id_by_size(660, 2);
         assert!(got.is_none());
-        let got = config.get_wasm_lane_id(660, 0);
+        let got = config.get_wasm_lane_id_by_size(660, 0);
         assert!(got.is_none());
-        let got = config.get_wasm_lane_id(660, 20);
+        let got = config.get_wasm_lane_id_by_size(660, 20);
         assert!(got.is_none());
+
+        let got = config.get_wasm_lane_id_by_payment_limited(100, 1);
+        assert!(got.is_none());
+    }
+
+    #[test]
+    fn given_wasm_when_by_payment_should_find_smallest_lane() {
+        let config = TransactionV1Config::new(
+            example_native(),
+            example_auction(),
+            example_install_upgrade(),
+            vec![
+                TransactionLaneDefinition {
+                    id: 3,
+                    max_transaction_length: 10,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 5,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 4,
+                    max_transaction_length: 11,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 55,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 5,
+                    max_transaction_length: 12,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 155,
+                    max_transaction_count: 1,
+                },
+            ],
+        );
+        let got = config.get_wasm_lane_id_by_payment_limited(54, 1);
+        assert_eq!(got, Some(4));
+    }
+
+    #[test]
+    fn given_wasm_when_by_payment_should_take_size_into_consideration() {
+        let config = TransactionV1Config::new(
+            example_native(),
+            example_auction(),
+            example_install_upgrade(),
+            vec![
+                TransactionLaneDefinition {
+                    id: 3,
+                    max_transaction_length: 10,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 5,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 4,
+                    max_transaction_length: 11,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 55,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 5,
+                    max_transaction_length: 12,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 155,
+                    max_transaction_count: 1,
+                },
+            ],
+        );
+        let got = config.get_wasm_lane_id_by_payment_limited(54, 12);
+        assert_eq!(got, Some(5));
+    }
+
+    #[test]
+    fn given_wasm_when_by_payment_should_return_none_if_no_size_fits() {
+        let config = TransactionV1Config::new(
+            example_native(),
+            example_auction(),
+            example_install_upgrade(),
+            vec![
+                TransactionLaneDefinition {
+                    id: 3,
+                    max_transaction_length: 10,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 5,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 4,
+                    max_transaction_length: 11,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 55,
+                    max_transaction_count: 1,
+                },
+                TransactionLaneDefinition {
+                    id: 5,
+                    max_transaction_length: 12,
+                    max_transaction_args_length: 1,
+                    max_transaction_gas_limit: 155,
+                    max_transaction_count: 1,
+                },
+            ],
+        );
+        let got = config.get_wasm_lane_id_by_payment_limited(54, 120);
+        assert_eq!(got, None);
     }
 
     #[test]
     fn should_deserialize() {
         let got: TransactionV1Config = serde_json::from_str(EXAMPLE_JSON).unwrap();
         let expected = TransactionV1Config::new(
-            TransactionLimitsDefinition::new(0, 1, 2, 3, 4),
-            TransactionLimitsDefinition::new(1, 5, 6, 7, 8),
-            TransactionLimitsDefinition::new(2, 9, 10, 11, 12),
+            TransactionLaneDefinition::new(0, 1, 2, 3, 4),
+            TransactionLaneDefinition::new(1, 5, 6, 7, 8),
+            TransactionLaneDefinition::new(2, 9, 10, 11, 12),
             vec![
-                TransactionLimitsDefinition::new(3, 13, 14, 15, 16),
-                TransactionLimitsDefinition::new(4, 17, 18, 19, 20),
-                TransactionLimitsDefinition::new(5, 21, 22, 23, 24),
+                TransactionLaneDefinition::new(3, 13, 14, 15, 16),
+                TransactionLaneDefinition::new(4, 17, 18, 19, 20),
+                TransactionLaneDefinition::new(5, 21, 22, 23, 24),
             ],
         );
         assert_eq!(got, expected);
@@ -677,13 +857,13 @@ mod tests {
     #[test]
     fn should_serialize() {
         let input = TransactionV1Config::new(
-            TransactionLimitsDefinition::new(0, 1, 2, 3, 4),
-            TransactionLimitsDefinition::new(1, 5, 6, 7, 8),
-            TransactionLimitsDefinition::new(2, 9, 10, 11, 12),
+            TransactionLaneDefinition::new(0, 1, 2, 3, 4),
+            TransactionLaneDefinition::new(1, 5, 6, 7, 8),
+            TransactionLaneDefinition::new(2, 9, 10, 11, 12),
             vec![
-                TransactionLimitsDefinition::new(3, 13, 14, 15, 16),
-                TransactionLimitsDefinition::new(4, 17, 18, 19, 20),
-                TransactionLimitsDefinition::new(5, 21, 22, 23, 24),
+                TransactionLaneDefinition::new(3, 13, 14, 15, 16),
+                TransactionLaneDefinition::new(4, 17, 18, 19, 20),
+                TransactionLaneDefinition::new(5, 21, 22, 23, 24),
             ],
         );
         let raw = serde_json::to_string(&input).unwrap();
@@ -692,35 +872,35 @@ mod tests {
         assert_eq!(got, expected);
     }
 
-    fn example_native() -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(0, 1500, 1024, 1_500_000_000, 150)
+    fn example_native() -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(0, 1500, 1024, 1_500_000_000, 150)
     }
 
-    fn example_auction() -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(1, 500, 3024, 3_500_000_000, 350)
+    fn example_auction() -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(1, 500, 3024, 3_500_000_000, 350)
     }
 
-    fn example_install_upgrade() -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(2, 10000, 2024, 2_500_000_000, 250)
+    fn example_install_upgrade() -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(2, 10000, 2024, 2_500_000_000, 250)
     }
 
-    fn wasm_small(id: u8) -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(id, 600, 4024, 4_500_000_000, 450)
+    fn wasm_small(id: u8) -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(id, 600, 4024, 4_500_000_000, 450)
     }
 
-    fn wasm_medium(id: u8) -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(id, 700, 5024, 5_500_000_000, 550)
+    fn wasm_medium(id: u8) -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(id, 700, 5024, 5_500_000_000, 550)
     }
 
-    fn wasm_large(id: u8) -> TransactionLimitsDefinition {
-        TransactionLimitsDefinition::new(id, 800, 6024, 6_500_000_000, 650)
+    fn wasm_large(id: u8) -> TransactionLaneDefinition {
+        TransactionLaneDefinition::new(id, 800, 6024, 6_500_000_000, 650)
     }
 
-    fn example_wasm() -> Vec<TransactionLimitsDefinition> {
+    fn example_wasm() -> Vec<TransactionLaneDefinition> {
         vec![wasm_small(3), wasm_medium(4), wasm_large(5)]
     }
 
-    fn example_wasm_reversed_ids() -> Vec<TransactionLimitsDefinition> {
+    fn example_wasm_reversed_ids() -> Vec<TransactionLaneDefinition> {
         vec![wasm_small(5), wasm_medium(4), wasm_large(3)]
     }
 

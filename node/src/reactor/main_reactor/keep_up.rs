@@ -236,16 +236,24 @@ impl MainReactor {
     ) -> Option<KeepUpInstruction> {
         match sync_instruction {
             SyncInstruction::Leap { .. } | SyncInstruction::LeapIntervalElapsed { .. } => {
-                // the block accumulator is unsure what our block position is relative to the
-                // network and wants to check peers for their notion of current tip.
-                // to do this, we switch back to CatchUp which will engage the necessary
-                // machinery to poll the network via the SyncLeap mechanic. if it turns out
-                // we are actually at or near tip after all, we simply switch back to KeepUp
-                // and continue onward. the accumulator is designed to periodically do this
-                // if we've received no gossip about new blocks from peers within an interval.
-                // this is to protect against partitioning and is not problematic behavior
-                // when / if it occurs.
-                Some(KeepUpInstruction::CatchUp)
+                if !self.sync_handling.is_isolated() {
+                    // the block accumulator is unsure what our block position is relative to the
+                    // network and wants to check peers for their notion of current tip.
+                    // to do this, we switch back to CatchUp which will engage the necessary
+                    // machinery to poll the network via the SyncLeap mechanic. if it turns out
+                    // we are actually at or near tip after all, we simply switch back to KeepUp
+                    // and continue onward. the accumulator is designed to periodically do this
+                    // if we've received no gossip about new blocks from peers within an interval.
+                    // this is to protect against partitioning and is not problematic behavior
+                    // when / if it occurs.
+                    Some(KeepUpInstruction::CatchUp)
+                } else {
+                    // If the node operates in isolated mode the assumption is that it might not
+                    // have any peers. So going back to CatchUp to query their
+                    // notion of tip might effectively disable nodes components to respond.
+                    // That's why - for isolated mode - we bypass this mechanism.
+                    None
+                }
             }
             SyncInstruction::BlockSync { block_hash } => {
                 debug!("KeepUp: BlockSync: {:?}", block_hash);

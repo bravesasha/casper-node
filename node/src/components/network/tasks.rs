@@ -236,6 +236,8 @@ where
     max_in_flight_demands: usize,
     /// Flag indicating whether this node is syncing.
     is_syncing: AtomicBool,
+    /// If false, will not allow handshake.
+    allow_handshake: bool,
 }
 
 impl<REv> NetworkContext<REv> {
@@ -245,6 +247,7 @@ impl<REv> NetworkContext<REv> {
         node_key_pair: Option<NodeKeyPair>,
         chain_info: ChainInfo,
         net_metrics: &Arc<Metrics>,
+        allow_handshake: bool,
     ) -> Self {
         // Set the demand max from configuration, regarding `0` as "unlimited".
         let max_in_flight_demands = if cfg.max_in_flight_demands == 0 {
@@ -277,6 +280,7 @@ impl<REv> NetworkContext<REv> {
             tarpit_chance: cfg.tarpit_chance,
             max_in_flight_demands,
             is_syncing: AtomicBool::new(false),
+            allow_handshake,
         }
     }
 
@@ -363,6 +367,14 @@ where
             peer_consensus_public_key,
             is_peer_syncing: _,
         }) => {
+            if !context.allow_handshake {
+                return IncomingConnection::Failed {
+                    peer_addr,
+                    peer_id,
+                    error: ConnectionError::HandshakeNotAllowed,
+                };
+            }
+
             if let Some(ref public_key) = peer_consensus_public_key {
                 Span::current().record("consensus_key", &field::display(public_key));
             }

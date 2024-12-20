@@ -369,7 +369,7 @@ pub enum FromStrError {
     Hash(String),
     /// URef parse error.
     URef(uref::FromStrError),
-    /// Legacy Transfer parse error.
+    /// Transfer parse error.
     Transfer(TransferFromStrError),
     /// DeployInfo parse error.
     DeployInfo(String),

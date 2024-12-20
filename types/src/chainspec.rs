@@ -62,7 +62,7 @@ pub use pricing_handling::PricingHandling;
 pub use protocol_config::ProtocolConfig;
 pub use refund_handling::RefundHandling;
 pub use transaction_config::{
-    DeployConfig, TransactionConfig, TransactionLimitsDefinition, TransactionV1Config,
+    DeployConfig, TransactionConfig, TransactionLaneDefinition, TransactionV1Config,
 };
 #[cfg(any(feature = "testing", test))]
 pub use transaction_config::{

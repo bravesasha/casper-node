@@ -33,14 +33,17 @@ struct RunWasmInfo {
 
 fn run_wasm(
     module_bytes: Vec<u8>,
+    cli_args: &Args,
     chainspec: &ChainspecConfig,
     func_name: &str,
-    args: &[String],
 ) -> (
     Result<Option<RuntimeValue>, casper_wasmi::Error>,
     RunWasmInfo,
 ) {
-    println!("Invoke export {:?} with args {:?}", func_name, args);
+    println!(
+        "Invoke export {:?} with args {:?}",
+        func_name, cli_args.args
+    );
 
     let instance = prepare_instance(&module_bytes, chainspec);
 
@@ -51,9 +54,13 @@ fn run_wasm(
     };
 
     let args = {
-        assert_eq!(args.len(), params.len(), "Not enough arguments supplied");
+        assert_eq!(
+            cli_args.args.len(),
+            params.len(),
+            "Not enough arguments supplied"
+        );
         let mut vec = Vec::new();
-        for (input_arg, func_arg) in args.iter().zip(params.into_iter()) {
+        for (input_arg, func_arg) in cli_args.args.iter().zip(params.into_iter()) {
             let value = match func_arg {
                 casper_wasmi::ValueType::I32 => {
                     casper_wasmi::RuntimeValue::I32(input_arg.parse().unwrap())
@@ -71,7 +78,11 @@ fn run_wasm(
 
     let start = Instant::now();
 
-    let mut externals = MinimalWasmiExternals::new(0, chainspec.transaction_config.block_gas_limit);
+    let gas_limit = cli_args
+        .gas_limit
+        .unwrap_or(chainspec.transaction_config.block_gas_limit);
+
+    let mut externals = MinimalWasmiExternals::new(0, gas_limit);
     let result: Result<Option<RuntimeValue>, casper_wasmi::Error> =
         instance
             .clone()
@@ -87,11 +98,13 @@ fn run_wasm(
 use clap::Parser;
 use serde::Deserialize;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(value_name = "MODULE")]
     wasm_file: PathBuf,
+    #[arg(long = "gas_limit")]
+    gas_limit: Option<u64>,
     #[arg(long = "invoke", value_name = "FUNCTION")]
     invoke: Option<String>,
     /// Arguments given to the Wasm module or the invoked function.
@@ -130,16 +143,16 @@ struct ChainspecConfig {
 fn main() {
     let args = Args::parse();
 
-    let chainspec_file = args.chainspec_file.expect("chainspec file");
+    let chainspec_file = args.clone().chainspec_file.expect("chainspec file");
     println!("Using chainspec file {:?}", chainspec_file.display());
     let chainspec_data = fs::read_to_string(chainspec_file.as_path()).expect("valid file");
     let chainspec_config: ChainspecConfig =
         toml::from_str(&chainspec_data).expect("valid chainspec");
 
-    let wasm_bytes = load_wasm_file(args.wasm_file);
+    let wasm_bytes = load_wasm_file(&args.wasm_file);
 
-    if let Some(func_name) = args.invoke {
-        let (result, info) = run_wasm(wasm_bytes, &chainspec_config, &func_name, &args.args);
+    if let Some(ref func_name) = args.invoke {
+        let (result, info) = run_wasm(wasm_bytes, &args, &chainspec_config, func_name);
 
         println!("result: {:?}", result);
         println!("elapsed: {:?}", info.elapsed);

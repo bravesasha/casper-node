@@ -28,8 +28,7 @@ use casper_types::{
     ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey, SemVer, SignedBlockHeader,
     SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
     TransactionId, TransactionRuntimeParams, TransactionV1, TransactionV1Hash, URef,
-    AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, LARGE_WASM_LANE_ID, MINT_LANE_ID,
-    U512,
+    AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, MINT_LANE_ID, U512,
 };
 
 use crate::{
@@ -47,6 +46,7 @@ use casper_storage::block_store::types::ApprovalsHashes;
 
 /// The largest valid unicode codepoint that can be encoded to UTF-8.
 pub(crate) const HIGHEST_UNICODE_CODEPOINT: char = '\u{10FFFF}';
+const LARGE_WASM_LANE_ID: u8 = 3;
 
 /// A cache used for memoization, typically on a single estimator.
 #[derive(Debug, Default)]

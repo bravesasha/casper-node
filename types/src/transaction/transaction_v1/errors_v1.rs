@@ -193,6 +193,8 @@ pub enum InvalidTransaction {
     UnexpectedTransactionFieldEntries,
     /// The transaction requires named arguments.
     ExpectedNamedArguments,
+    /// The transaction required bytes arguments.
+    ExpectedBytesArguments,
     /// The transaction runtime is invalid.
     InvalidTransactionRuntime {
         /// The expected runtime as specified by the chainspec.
@@ -200,6 +202,8 @@ pub enum InvalidTransaction {
     },
     /// The transaction is missing a seed field.
     MissingSeed,
+    // Pricing mode not implemented yet
+    PricingModeNotSupported,
 }
 
 impl Display for InvalidTransaction {
@@ -380,6 +384,9 @@ impl Display for InvalidTransaction {
             InvalidTransaction::ExpectedNamedArguments => {
                 write!(formatter, "transaction requires named arguments")
             }
+            InvalidTransaction::ExpectedBytesArguments => {
+                write!(formatter, "transaction requires bytes arguments")
+            }
             InvalidTransaction::InvalidTransactionRuntime { expected } => {
                 write!(
                     formatter,
@@ -388,6 +395,9 @@ impl Display for InvalidTransaction {
             }
             InvalidTransaction::MissingSeed => {
                 write!(formatter, "missing seed for install or upgrade")
+            }
+            InvalidTransaction::PricingModeNotSupported => {
+                write!(formatter, "Pricing mode not supported")
             }
         }
     }
@@ -438,8 +448,10 @@ impl StdError for InvalidTransaction {
                 FieldDeserializationError::FromBytesError { error, .. } => Some(error),
             },
             InvalidTransaction::ExpectedNamedArguments
+            | InvalidTransaction::ExpectedBytesArguments
             | InvalidTransaction::InvalidTransactionRuntime { .. }
-            | InvalidTransaction::MissingSeed => None,
+            | InvalidTransaction::MissingSeed
+            | InvalidTransaction::PricingModeNotSupported => None,
         }
     }
 }

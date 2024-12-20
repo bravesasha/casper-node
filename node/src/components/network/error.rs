@@ -196,6 +196,9 @@ pub enum ConnectionError {
     /// This is usually a bug.
     #[error("handshake sink/stream could not be reunited")]
     FailedToReuniteHandshakeSinkAndStream,
+    /// Handshake not allowed (Isolated mode)
+    #[error("handshake not allowed (Isolated mode)")]
+    HandshakeNotAllowed,
 }
 
 /// IO operation that can time out or close.

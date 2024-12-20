@@ -25,7 +25,7 @@ use crate::{
     package::Package,
     system::{
         auction::{Bid, BidKind, EraInfo, Unbond, UnbondingPurse, WithdrawPurse},
-        prepayment::PrepaidKind,
+        prepayment::PrepaymentKind,
     },
     AddressableEntity, ByteCode, CLValue, DeployInfo, EntryPointValue, TransferV1,
 };
@@ -46,8 +46,8 @@ pub enum StoredValueTag {
     Contract = 3,
     /// A contract package.
     ContractPackage = 4,
-    /// A version 1 (legacy) transfer.
-    LegacyTransfer = 5,
+    /// A version 1 transfer.
+    Transfer = 5,
     /// Info about a deploy.
     DeployInfo = 6,
     /// Info about an era.
@@ -72,8 +72,8 @@ pub enum StoredValueTag {
     Message = 16,
     /// A NamedKey record.
     NamedKey = 17,
-    /// A reservation record.
-    Reservation = 18,
+    /// A prepayment record.
+    Prepayment = 18,
     /// An entrypoint record.
     EntryPoint = 19,
     /// Raw bytes.
@@ -101,7 +101,7 @@ pub enum StoredValue {
     /// A contract package.
     ContractPackage(ContractPackage),
     /// A version 1 transfer.
-    LegacyTransfer(TransferV1),
+    Transfer(TransferV1),
     /// Info about a deploy.
     DeployInfo(DeployInfo),
     /// Info about an era.
@@ -126,8 +126,8 @@ pub enum StoredValue {
     Message(MessageChecksum),
     /// A NamedKey record.
     NamedKey(NamedKeyValue),
-    /// A reservation record.
-    Prepaid(PrepaidKind),
+    /// A prepayment record.
+    Prepayment(PrepaymentKind),
     /// An entrypoint record.
     EntryPoint(EntryPointValue),
     /// Raw bytes. Similar to a [`crate::StoredValue::CLValue`] but does not incur overhead of a
@@ -191,10 +191,10 @@ impl StoredValue {
         }
     }
 
-    /// Returns a reference to the wrapped `TransferV1` if this is a `LegacyTransfer` variant.
-    pub fn as_legacy_transfer(&self) -> Option<&TransferV1> {
+    /// Returns a reference to the wrapped `TransferV1` if this is a `Transfer` variant.
+    pub fn as_transfer(&self) -> Option<&TransferV1> {
         match self {
-            StoredValue::LegacyTransfer(transfer_v1) => Some(transfer_v1),
+            StoredValue::Transfer(transfer_v1) => Some(transfer_v1),
             _ => None,
         }
     }
@@ -348,10 +348,10 @@ impl StoredValue {
         }
     }
 
-    /// Returns the `TransferV1` if this is a `LegacyTransfer` variant.
+    /// Returns the `TransferV1` if this is a `Transfer` variant.
     pub fn into_legacy_transfer(self) -> Option<TransferV1> {
         match self {
-            StoredValue::LegacyTransfer(transfer_v1) => Some(transfer_v1),
+            StoredValue::Transfer(transfer_v1) => Some(transfer_v1),
             _ => None,
         }
     }
@@ -430,7 +430,7 @@ impl StoredValue {
             StoredValue::ContractWasm(_) => "ContractWasm".to_string(),
             StoredValue::Contract(_) => "Contract".to_string(),
             StoredValue::ContractPackage(_) => "ContractPackage".to_string(),
-            StoredValue::LegacyTransfer(_) => "LegacyTransfer".to_string(),
+            StoredValue::Transfer(_) => "Transfer".to_string(),
             StoredValue::DeployInfo(_) => "DeployInfo".to_string(),
             StoredValue::EraInfo(_) => "EraInfo".to_string(),
             StoredValue::Bid(_) => "Bid".to_string(),
@@ -443,7 +443,7 @@ impl StoredValue {
             StoredValue::MessageTopic(_) => "MessageTopic".to_string(),
             StoredValue::Message(_) => "Message".to_string(),
             StoredValue::NamedKey(_) => "NamedKey".to_string(),
-            StoredValue::Prepaid(_) => "Reservation".to_string(),
+            StoredValue::Prepayment(_) => "Prepayment".to_string(),
             StoredValue::EntryPoint(_) => "EntryPoint".to_string(),
             StoredValue::RawBytes(_) => "RawBytes".to_string(),
         }
@@ -457,7 +457,7 @@ impl StoredValue {
             StoredValue::ContractWasm(_) => StoredValueTag::ContractWasm,
             StoredValue::ContractPackage(_) => StoredValueTag::ContractPackage,
             StoredValue::Contract(_) => StoredValueTag::Contract,
-            StoredValue::LegacyTransfer(_) => StoredValueTag::LegacyTransfer,
+            StoredValue::Transfer(_) => StoredValueTag::Transfer,
             StoredValue::DeployInfo(_) => StoredValueTag::DeployInfo,
             StoredValue::EraInfo(_) => StoredValueTag::EraInfo,
             StoredValue::Bid(_) => StoredValueTag::Bid,
@@ -470,7 +470,7 @@ impl StoredValue {
             StoredValue::MessageTopic(_) => StoredValueTag::MessageTopic,
             StoredValue::Message(_) => StoredValueTag::Message,
             StoredValue::NamedKey(_) => StoredValueTag::NamedKey,
-            StoredValue::Prepaid(_) => StoredValueTag::Reservation,
+            StoredValue::Prepayment(_) => StoredValueTag::Prepayment,
             StoredValue::EntryPoint(_) => StoredValueTag::EntryPoint,
             StoredValue::RawBytes(_) => StoredValueTag::RawBytes,
         }
@@ -679,11 +679,8 @@ impl TryFrom<StoredValue> for TransferV1 {
 
     fn try_from(value: StoredValue) -> Result<Self, Self::Error> {
         match value {
-            StoredValue::LegacyTransfer(transfer_v1) => Ok(transfer_v1),
-            _ => Err(TypeMismatch::new(
-                "LegacyTransfer".to_string(),
-                value.type_name(),
-            )),
+            StoredValue::Transfer(transfer_v1) => Ok(transfer_v1),
+            _ => Err(TypeMismatch::new("Transfer".to_string(), value.type_name())),
         }
     }
 }
@@ -766,7 +763,7 @@ impl ToBytes for StoredValue {
                 StoredValue::ContractPackage(contract_package) => {
                     contract_package.serialized_length()
                 }
-                StoredValue::LegacyTransfer(transfer_v1) => transfer_v1.serialized_length(),
+                StoredValue::Transfer(transfer_v1) => transfer_v1.serialized_length(),
                 StoredValue::DeployInfo(deploy_info) => deploy_info.serialized_length(),
                 StoredValue::EraInfo(era_info) => era_info.serialized_length(),
                 StoredValue::Bid(bid) => bid.serialized_length(),
@@ -781,7 +778,7 @@ impl ToBytes for StoredValue {
                 }
                 StoredValue::Message(message_digest) => message_digest.serialized_length(),
                 StoredValue::NamedKey(named_key_value) => named_key_value.serialized_length(),
-                StoredValue::Prepaid(reservation_kind) => reservation_kind.serialized_length(),
+                StoredValue::Prepayment(prepayment_kind) => prepayment_kind.serialized_length(),
                 StoredValue::EntryPoint(entry_point_value) => entry_point_value.serialized_length(),
                 StoredValue::RawBytes(bytes) => bytes.serialized_length(),
             }
@@ -795,7 +792,7 @@ impl ToBytes for StoredValue {
             StoredValue::ContractWasm(contract_wasm) => contract_wasm.write_bytes(writer),
             StoredValue::Contract(contract_header) => contract_header.write_bytes(writer),
             StoredValue::ContractPackage(contract_package) => contract_package.write_bytes(writer),
-            StoredValue::LegacyTransfer(transfer_v1) => transfer_v1.write_bytes(writer),
+            StoredValue::Transfer(transfer_v1) => transfer_v1.write_bytes(writer),
             StoredValue::DeployInfo(deploy_info) => deploy_info.write_bytes(writer),
             StoredValue::EraInfo(era_info) => era_info.write_bytes(writer),
             StoredValue::Bid(bid) => bid.write_bytes(writer),
@@ -810,7 +807,7 @@ impl ToBytes for StoredValue {
             }
             StoredValue::Message(message_digest) => message_digest.write_bytes(writer),
             StoredValue::NamedKey(named_key_value) => named_key_value.write_bytes(writer),
-            StoredValue::Prepaid(reservation_kind) => reservation_kind.write_bytes(writer),
+            StoredValue::Prepayment(prepayment_kind) => prepayment_kind.write_bytes(writer),
             StoredValue::EntryPoint(entry_point_value) => entry_point_value.write_bytes(writer),
             StoredValue::RawBytes(bytes) => bytes.write_bytes(writer),
         }
@@ -836,10 +833,8 @@ impl FromBytes for StoredValue {
             }
             tag if tag == StoredValueTag::Contract as u8 => Contract::from_bytes(remainder)
                 .map(|(contract, remainder)| (StoredValue::Contract(contract), remainder)),
-            tag if tag == StoredValueTag::LegacyTransfer as u8 => TransferV1::from_bytes(remainder)
-                .map(|(transfer_v1, remainder)| {
-                    (StoredValue::LegacyTransfer(transfer_v1), remainder)
-                }),
+            tag if tag == StoredValueTag::Transfer as u8 => TransferV1::from_bytes(remainder)
+                .map(|(transfer_v1, remainder)| (StoredValue::Transfer(transfer_v1), remainder)),
             tag if tag == StoredValueTag::DeployInfo as u8 => DeployInfo::from_bytes(remainder)
                 .map(|(deploy_info, remainder)| (StoredValue::DeployInfo(deploy_info), remainder)),
             tag if tag == StoredValueTag::EraInfo as u8 => EraInfo::from_bytes(remainder)
@@ -901,7 +896,7 @@ mod serde_helpers {
         ContractWasm(&'a ContractWasm),
         Contract(&'a Contract),
         ContractPackage(&'a ContractPackage),
-        LegacyTransfer(&'a TransferV1),
+        Transfer(&'a TransferV1),
         DeployInfo(&'a DeployInfo),
         EraInfo(&'a EraInfo),
         Bid(&'a Bid),
@@ -914,7 +909,7 @@ mod serde_helpers {
         MessageTopic(&'a MessageTopicSummary),
         Message(&'a MessageChecksum),
         NamedKey(&'a NamedKeyValue),
-        Reservation(&'a PrepaidKind),
+        Prepayment(&'a PrepaymentKind),
         EntryPoint(&'a EntryPointValue),
         /// Raw bytes.
         RawBytes(Bytes),
@@ -927,7 +922,7 @@ mod serde_helpers {
         ContractWasm(ContractWasm),
         Contract(Contract),
         ContractPackage(ContractPackage),
-        LegacyTransfer(TransferV1),
+        Transfer(TransferV1),
         DeployInfo(DeployInfo),
         EraInfo(EraInfo),
         Bid(Box<Bid>),
@@ -955,9 +950,7 @@ mod serde_helpers {
                 StoredValue::ContractPackage(payload) => {
                     HumanReadableSerHelper::ContractPackage(payload)
                 }
-                StoredValue::LegacyTransfer(payload) => {
-                    HumanReadableSerHelper::LegacyTransfer(payload)
-                }
+                StoredValue::Transfer(payload) => HumanReadableSerHelper::Transfer(payload),
                 StoredValue::DeployInfo(payload) => HumanReadableSerHelper::DeployInfo(payload),
                 StoredValue::EraInfo(payload) => HumanReadableSerHelper::EraInfo(payload),
                 StoredValue::Bid(payload) => HumanReadableSerHelper::Bid(payload),
@@ -976,7 +969,7 @@ mod serde_helpers {
                     HumanReadableSerHelper::Message(message_digest)
                 }
                 StoredValue::NamedKey(payload) => HumanReadableSerHelper::NamedKey(payload),
-                StoredValue::Prepaid(payload) => HumanReadableSerHelper::Reservation(payload),
+                StoredValue::Prepayment(payload) => HumanReadableSerHelper::Prepayment(payload),
                 StoredValue::EntryPoint(payload) => HumanReadableSerHelper::EntryPoint(payload),
                 StoredValue::RawBytes(bytes) => {
                     HumanReadableSerHelper::RawBytes(bytes.as_slice().into())
@@ -997,9 +990,7 @@ mod serde_helpers {
                 HumanReadableDeserHelper::ContractPackage(payload) => {
                     StoredValue::ContractPackage(payload)
                 }
-                HumanReadableDeserHelper::LegacyTransfer(payload) => {
-                    StoredValue::LegacyTransfer(payload)
-                }
+                HumanReadableDeserHelper::Transfer(payload) => StoredValue::Transfer(payload),
                 HumanReadableDeserHelper::DeployInfo(payload) => StoredValue::DeployInfo(payload),
                 HumanReadableDeserHelper::EraInfo(payload) => StoredValue::EraInfo(payload),
                 HumanReadableDeserHelper::Bid(bid) => StoredValue::Bid(bid),

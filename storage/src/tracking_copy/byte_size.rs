@@ -35,7 +35,7 @@ impl ByteSize for StoredValue {
                 }
                 StoredValue::SmartContract(package) => package.serialized_length(),
                 StoredValue::DeployInfo(deploy_info) => deploy_info.serialized_length(),
-                StoredValue::LegacyTransfer(transfer_v1) => transfer_v1.serialized_length(),
+                StoredValue::Transfer(transfer_v1) => transfer_v1.serialized_length(),
                 StoredValue::EraInfo(era_info) => era_info.serialized_length(),
                 StoredValue::Bid(bid) => bid.serialized_length(),
                 StoredValue::BidKind(bid_kind) => bid_kind.serialized_length(),
@@ -47,7 +47,7 @@ impl ByteSize for StoredValue {
                 }
                 StoredValue::Message(message_summary) => message_summary.serialized_length(),
                 StoredValue::NamedKey(named_key) => named_key.serialized_length(),
-                StoredValue::Prepaid(reservation_kind) => reservation_kind.serialized_length(),
+                StoredValue::Prepayment(prepayment_kind) => prepayment_kind.serialized_length(),
                 StoredValue::EntryPoint(entry_point) => entry_point.serialized_length(),
                 StoredValue::RawBytes(raw_bytes) => raw_bytes.serialized_length(),
             }

@@ -61,6 +61,17 @@ impl MainReactor {
                 match self.initialize_next_component(effect_builder) {
                     Some(effects) => (initialization_logic_default_delay.into(), effects),
                     None => {
+                        if self.sync_handling.is_isolated() {
+                            // If node is "isolated" it doesn't care about peers
+                            if let Err(msg) = self.refresh_contract_runtime() {
+                                return (
+                                    Duration::ZERO,
+                                    fatal!(effect_builder, "{}", msg).ignore(),
+                                );
+                            }
+                            self.state = ReactorState::KeepUp;
+                            return (Duration::ZERO, Effects::new());
+                        }
                         if false == self.net.has_sufficient_fully_connected_peers() {
                             info!("Initialize: awaiting sufficient fully-connected peers");
                             return (initialization_logic_default_delay.into(), Effects::new());
