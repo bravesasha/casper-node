@@ -939,7 +939,7 @@ dependencies = [
  "tokio-serde",
  "tokio-stream",
  "tokio-util 0.6.10",
- "toml 0.7.8",
+ "toml 0.8.19",
  "tower",
  "tracing",
  "tracing-futures",
@@ -6079,7 +6079,6 @@ version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd79e69d3b627db300ff956027cc6c3798cef26d22526befdfcd12feeb6d2257"
 dependencies = [
- "indexmap 2.7.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -6092,6 +6091,7 @@ version = "0.8.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1ed1f98e3fdc28d6d910e6737ae6ab1a93bf1985935a1193e68f93eeb68d24e"
 dependencies = [
+ "indexmap 2.7.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
