@@ -13,7 +13,7 @@ use crate::components::consensus::{
     highway_core::{
         evidence::EvidenceError,
         highway::Dependency,
-        highway_testing::{TEST_BLOCK_REWARD, TEST_ENDORSEMENT_EVIDENCE_LIMIT, TEST_INSTANCE_ID},
+        highway_testing::{TEST_ENDORSEMENT_EVIDENCE_LIMIT, TEST_INSTANCE_ID},
     },
     traits::{ConsensusValueT, ValidatorSecret},
 };
@@ -121,8 +121,6 @@ impl<C: Context> SignedWireUnit<C> {
 pub(crate) fn test_params(seed: u64) -> Params {
     Params::new(
         seed,
-        TEST_BLOCK_REWARD,
-        TEST_BLOCK_REWARD / 5,
         TEST_MIN_ROUND_LEN,
         TEST_MAX_ROUND_LEN,
         TEST_INIT_ROUND_LEN,
@@ -239,8 +237,6 @@ fn add_unit() -> Result<(), AddUnitError<TestContext>> {
 fn ban_and_mark_faulty() -> Result<(), AddUnitError<TestContext>> {
     let params = Params::new(
         0,
-        TEST_BLOCK_REWARD,
-        TEST_BLOCK_REWARD / 5,
         TimeDiff::from_millis(1 << 4),
         TimeDiff::from_millis(1 << 19),
         TimeDiff::from_millis(1 << 4),
@@ -508,7 +504,7 @@ fn validate_lnc_mixed_citations() -> Result<(), AddUnitError<TestContext>> {
     //                                    || |
     //                                    || |
     // Bob                     b0<---------+ |
-    //                          +          | |
+    //                          + | |
     //                          |          | |
     //                    +c1<--+          | |
     // Carol         c0<--+                | |
@@ -549,12 +545,12 @@ fn validate_lnc_transitive_endorsement() -> Result<(), AddUnitError<TestContext>
     // c1 doesn't have to be endorsed, it is enough that c0 is.
     //
     // Alice           a0<-----------+
-    //                 +             |
+    //                 + |
     //          b0<----+             |
     // Bob                           |
     //                               |
     //          b0'<---+             |
-    //                 +             |
+    //                 + |
     // Carol           c0<---+c1<----+
     //                               |
     //                               |
@@ -586,12 +582,12 @@ fn validate_lnc_cite_descendant_of_equivocation() -> Result<(), AddUnitError<Tes
     // This is still detected as violation of the LNC.
     //
     // Alice                  a0<----+
-    //                        +      |
+    //                        + |
     //          b0<---+b1<----+      |
     // Bob                           |
     //                               |
     //          b0'<---+             |
-    //                 +             |
+    //                 + |
     // Carol           c0            |
     //                  ^            +
     // Dan              +----------+d0

@@ -18,16 +18,16 @@ use serde::{Deserialize, Serialize};
 use smallvec::smallvec;
 use tracing::{debug, info};
 
-use casper_types::SecretKey;
+use casper_types::{Chainspec, ChainspecRawBytes, SecretKey};
 
 use super::{
-    chain_info::ChainInfo, Config, Event as NetworkEvent, FromIncoming, GossipedAddress, Identity,
+    chain_info::ChainInfo, Event as NetworkEvent, FromIncoming, GossipedAddress, Identity,
     MessageKind, Network, Payload,
 };
 use crate::{
     components::{
         gossiper::{self, GossipItem, Gossiper},
-        Component, InitializedComponent,
+        network, Component, InitializedComponent,
     },
     effect::{
         announcements::{ControlAnnouncement, GossiperAnnouncement, PeerBehaviorAnnouncement},
@@ -39,13 +39,13 @@ use crate::{
         EffectBuilder, Effects,
     },
     protocol,
-    reactor::{self, EventQueueHandle, Finalize, Reactor, Runner},
+    reactor::{self, main_reactor::Config, EventQueueHandle, Finalize, Reactor, Runner},
     testing::{
         self, init_logging,
         network::{NetworkedReactor, Nodes, TestingNetwork},
         ConditionCheckReactor,
     },
-    types::{Chainspec, ChainspecRawBytes, NodeId, ValidatorMatrix},
+    types::{NodeId, SyncHandling, ValidatorMatrix},
     NodeRng,
 };
 
@@ -182,43 +182,6 @@ impl Reactor for TestReactor {
     type Config = Config;
     type Error = anyhow::Error;
 
-    fn new(
-        cfg: Self::Config,
-        _chainspec: Arc<Chainspec>,
-        _chainspec_raw_bytes: Arc<ChainspecRawBytes>,
-        our_identity: Identity,
-        registry: &Registry,
-        _event_queue: EventQueueHandle<Self::Event>,
-        rng: &mut NodeRng,
-    ) -> anyhow::Result<(Self, Effects<Self::Event>)> {
-        let secret_key = SecretKey::random(rng);
-        let mut net = Network::new(
-            cfg,
-            our_identity,
-            None,
-            registry,
-            ChainInfo::create_for_testing(),
-            ValidatorMatrix::new_with_validator(Arc::new(secret_key)),
-        )?;
-        let gossiper_config = gossiper::Config::new_with_small_timeouts();
-        let address_gossiper = Gossiper::<{ GossipedAddress::ID_IS_COMPLETE_ITEM }, _>::new(
-            "address_gossiper",
-            gossiper_config,
-            registry,
-        )?;
-
-        net.start_initialization();
-        let effects = smallvec![async { smallvec![Event::Net(NetworkEvent::Initialize)] }.boxed()];
-
-        Ok((
-            TestReactor {
-                net,
-                address_gossiper,
-            },
-            effects,
-        ))
-    }
-
     fn dispatch_event(
         &mut self,
         effect_builder: EffectBuilder<Self::Event>,
@@ -276,6 +239,45 @@ impl Reactor for TestReactor {
             ),
             Event::BlocklistAnnouncement(_announcement) => Effects::new(),
         }
+    }
+
+    fn new(
+        cfg: Self::Config,
+        _chainspec: Arc<Chainspec>,
+        _chainspec_raw_bytes: Arc<ChainspecRawBytes>,
+        our_identity: Identity,
+        registry: &Registry,
+        _event_queue: EventQueueHandle<Self::Event>,
+        rng: &mut NodeRng,
+    ) -> anyhow::Result<(Self, Effects<Self::Event>)> {
+        let secret_key = SecretKey::random(rng);
+        let allow_handshake = cfg.node.sync_handling != SyncHandling::Isolated;
+        let mut net = Network::new(
+            cfg.network.clone(),
+            our_identity,
+            None,
+            registry,
+            ChainInfo::create_for_testing(),
+            ValidatorMatrix::new_with_validator(Arc::new(secret_key)),
+            allow_handshake,
+        )?;
+        let gossiper_config = gossiper::Config::new_with_small_timeouts();
+        let address_gossiper = Gossiper::<{ GossipedAddress::ID_IS_COMPLETE_ITEM }, _>::new(
+            "address_gossiper",
+            gossiper_config,
+            registry,
+        )?;
+
+        net.start_initialization();
+        let effects = smallvec![async { smallvec![Event::Net(NetworkEvent::Initialize)] }.boxed()];
+
+        Ok((
+            TestReactor {
+                net,
+                address_gossiper,
+            },
+            effects,
+        ))
     }
 }
 
@@ -351,13 +353,15 @@ async fn run_two_node_network_five_times() {
         let mut net = TestingNetwork::new();
 
         let start = Instant::now();
-        net.add_node_with_config(
-            Config::default_local_net_first_node(first_node_port),
-            &mut rng,
-        )
-        .await
-        .unwrap();
-        net.add_node_with_config(Config::default_local_net(first_node_port), &mut rng)
+
+        let cfg = Config::default().with_network_config(
+            network::Config::default_local_net_first_node(first_node_port),
+        );
+        net.add_node_with_config(cfg, &mut rng).await.unwrap();
+
+        let cfg = Config::default()
+            .with_network_config(network::Config::default_local_net(first_node_port));
+        net.add_node_with_config(cfg.clone(), &mut rng)
             .await
             .unwrap();
         let end = Instant::now();
@@ -417,12 +421,11 @@ async fn bind_to_real_network_interface() {
         .ip();
     let port = testing::unused_port_on_localhost();
 
-    let local_net_config = Config::new((local_addr, port).into());
+    let cfg =
+        Config::default().with_network_config(network::Config::new((local_addr, port).into()));
 
     let mut net = TestingNetwork::<TestReactor>::new();
-    net.add_node_with_config(local_net_config, &mut rng)
-        .await
-        .unwrap();
+    net.add_node_with_config(cfg, &mut rng).await.unwrap();
 
     // The network should be fully connected.
     let timeout = Duration::from_secs(2);
@@ -452,17 +455,16 @@ async fn check_varying_size_network_connects() {
 
         // Pick a random port in the higher ranges that is likely to be unused.
         let first_node_port = testing::unused_port_on_localhost();
+        let cfg = Config::default().with_network_config(
+            network::Config::default_local_net_first_node(first_node_port),
+        );
 
-        let _ = net
-            .add_node_with_config(
-                Config::default_local_net_first_node(first_node_port),
-                &mut rng,
-            )
-            .await
-            .unwrap();
+        let _ = net.add_node_with_config(cfg, &mut rng).await.unwrap();
+        let cfg = Config::default()
+            .with_network_config(network::Config::default_local_net(first_node_port));
 
         for _ in 1..number_of_nodes {
-            net.add_node_with_config(Config::default_local_net(first_node_port), &mut rng)
+            net.add_node_with_config(cfg.clone(), &mut rng)
                 .await
                 .unwrap();
         }
@@ -506,16 +508,17 @@ async fn ensure_peers_metric_is_correct() {
         // Pick a random port in the higher ranges that is likely to be unused.
         let first_node_port = testing::unused_port_on_localhost();
 
-        let _ = net
-            .add_node_with_config(
-                Config::default_local_net_first_node(first_node_port),
-                &mut rng,
-            )
-            .await
-            .unwrap();
+        let cfg = Config::default().with_network_config(
+            network::Config::default_local_net_first_node(first_node_port),
+        );
+
+        let _ = net.add_node_with_config(cfg, &mut rng).await.unwrap();
+
+        let cfg = Config::default()
+            .with_network_config(network::Config::default_local_net(first_node_port));
 
         for _ in 1..number_of_nodes {
-            net.add_node_with_config(Config::default_local_net(first_node_port), &mut rng)
+            net.add_node_with_config(cfg.clone(), &mut rng)
                 .await
                 .unwrap();
         }

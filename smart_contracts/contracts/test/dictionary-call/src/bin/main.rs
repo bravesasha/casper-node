@@ -10,7 +10,10 @@ use casper_contract::{
     contract_api::{runtime, storage},
     unwrap_or_revert::UnwrapOrRevert,
 };
-use casper_types::{bytesrepr::FromBytes, CLTyped, ContractHash, RuntimeArgs, URef};
+use casper_types::{
+    bytesrepr::FromBytes, contracts::ContractHash, AddressableEntityHash, CLTyped, RuntimeArgs,
+    URef,
+};
 
 use dictionary::{
     DEFAULT_DICTIONARY_NAME, DEFAULT_DICTIONARY_VALUE, INVALID_GET_DICTIONARY_ITEM_KEY_ENTRYPOINT,
@@ -24,8 +27,8 @@ use dictionary_call::{
 /// Calls dictionary contract by hash as passed by `ARG_CONTRACT_HASH` argument and returns a
 /// single value.
 fn call_dictionary_contract<T: CLTyped + FromBytes>(entrypoint: &str) -> T {
-    let contract_hash: ContractHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
-    runtime::call_contract(contract_hash, entrypoint, RuntimeArgs::default())
+    let contract_hash: AddressableEntityHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
+    runtime::call_contract(contract_hash.into(), entrypoint, RuntimeArgs::default())
 }
 
 #[no_mangle]
@@ -58,17 +61,17 @@ pub extern "C" fn call() {
             storage::dictionary_put(uref, NEW_DICTIONARY_ITEM_KEY, value);
         }
         Operation::InvalidPutDictionaryItemKey => {
-            let contract_hash: ContractHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
+            let contract_hash: AddressableEntityHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
             runtime::call_contract(
-                contract_hash,
+                contract_hash.into(),
                 INVALID_PUT_DICTIONARY_ITEM_KEY_ENTRYPOINT,
                 RuntimeArgs::default(),
             )
         }
         Operation::InvalidGetDictionaryItemKey => {
-            let contract_hash: ContractHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
+            let contract_hash: AddressableEntityHash = runtime::get_named_arg(ARG_CONTRACT_HASH);
             runtime::call_contract(
-                contract_hash,
+                ContractHash::new(contract_hash.value()),
                 INVALID_GET_DICTIONARY_ITEM_KEY_ENTRYPOINT,
                 RuntimeArgs::default(),
             )

@@ -5,9 +5,10 @@ extern crate alloc;
 
 use casper_contract::contract_api::{runtime, system};
 use casper_types::{
+    contracts::ContractHash,
     runtime_args,
     system::auction::{self, DelegationRate},
-    ContractHash, PublicKey, RuntimeArgs, SecretKey, U512,
+    PublicKey, SecretKey, U512,
 };
 
 const DELEGATION_RATE: DelegationRate = 42;

@@ -1,9 +1,7 @@
 use datasize::DataSize;
 use serde::{Deserialize, Serialize};
 
-use crate::types::BlockHash;
-
-use casper_types::TimeDiff;
+use casper_types::{BlockHash, TimeDiff};
 
 const DEFAULT_IDLE_TOLERANCE: &str = "20min";
 const DEFAULT_MAX_ATTEMPTS: usize = 3;
@@ -12,7 +10,7 @@ const DEFAULT_SHUTDOWN_FOR_UPGRADE_TIMEOUT: &str = "2min";
 const DEFAULT_UPGRADE_TIMEOUT: &str = "30sec";
 
 /// Node sync configuration.
-#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default)]
+#[derive(DataSize, Debug, Deserialize, Serialize, Clone, Default, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncHandling {
     /// Attempt to acquire all historical state back to genesis.
@@ -22,6 +20,12 @@ pub enum SyncHandling {
     Ttl,
     /// Don't attempt to sync historical blocks.
     NoSync,
+    /// Don't attempt to sync historical blocks and shut down node instead of switching to KeepUp
+    /// after acquiring the first complete block
+    CompleteBlock,
+    /// The node operates in isolation - no peers are needed, the node won't wait for peers to
+    /// switch to KeepUp.
+    Isolated,
 }
 
 impl SyncHandling {
@@ -38,6 +42,16 @@ impl SyncHandling {
     /// Don't Sync?
     pub fn is_no_sync(&self) -> bool {
         matches!(self, SyncHandling::NoSync)
+    }
+
+    /// Don't Sync and shut down?
+    pub fn is_complete_block(&self) -> bool {
+        matches!(self, SyncHandling::CompleteBlock)
+    }
+
+    /// Isolated?
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, SyncHandling::Isolated)
     }
 }
 

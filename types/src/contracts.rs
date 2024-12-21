@@ -2,6 +2,8 @@
 // TODO - remove once schemars stops causing warning.
 #![allow(clippy::field_reassign_with_default)]
 
+mod named_keys;
+
 use alloc::{
     collections::{BTreeMap, BTreeSet},
     format,
@@ -10,36 +12,44 @@ use alloc::{
 };
 use core::{
     array::TryFromSliceError,
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display, Formatter},
 };
+use serde_bytes::ByteBuf;
 
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
 #[cfg(feature = "json-schema")]
 use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
-use serde::{de::Error as SerdeError, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    de::{self, Error as SerdeError},
+    ser, Deserialize, Deserializer, Serialize, Serializer,
+};
+#[cfg(feature = "json-schema")]
+use serde_map_to_array::KeyValueJsonSchema;
+use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
+
+pub use self::named_keys::NamedKeys;
 
 use crate::{
     account,
-    account::TryFromSliceForAccountHashError,
+    addressable_entity::TryFromSliceForAccountHashError,
     bytesrepr::{self, FromBytes, ToBytes, U32_SERIALIZED_LENGTH},
     checksummed_hex,
     contract_wasm::ContractWasmHash,
-    uref,
-    uref::URef,
-    CLType, CLTyped, ContextAccessRights, HashAddr, Key, ProtocolVersion, KEY_HASH_LENGTH,
+    package::PackageStatus,
+    serde_helpers::contract_package::HumanReadableContractPackage,
+    uref::{self, URef},
+    AddressableEntityHash, CLType, CLTyped, EntityVersionKey, EntryPoint as EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints as EntityEntryPoints, Group,
+    Groups, HashAddr, Key, Package, PackageHash, Parameter, Parameters, ProtocolVersion,
+    KEY_HASH_LENGTH,
 };
 
-/// Maximum number of distinct user groups.
-pub const MAX_GROUPS: u8 = 10;
-/// Maximum number of URefs which can be assigned across all user groups.
-pub const MAX_TOTAL_UREFS: usize = 100;
-
 const CONTRACT_STRING_PREFIX: &str = "contract-";
-const PACKAGE_STRING_PREFIX: &str = "contract-package-";
+const CONTRACT_PACKAGE_STRING_PREFIX: &str = "contract-package-";
 // We need to support the legacy prefix of "contract-package-wasm".
-const PACKAGE_STRING_LEGACY_EXTRA_PREFIX: &str = "wasm";
+const CONTRACT_PACKAGE_STRING_LEGACY_EXTRA_PREFIX: &str = "wasm";
 
 /// Set of errors which may happen when working with contract headers.
 #[derive(Debug, PartialEq, Eq)]
@@ -201,52 +211,6 @@ impl Display for FromStrError {
     }
 }
 
-/// A (labelled) "user group". Each method of a versioned contract may be
-/// associated with one or more user groups which are allowed to call it.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub struct Group(String);
-
-impl Group {
-    /// Basic constructor
-    pub fn new<T: Into<String>>(s: T) -> Self {
-        Group(s.into())
-    }
-
-    /// Retrieves underlying name.
-    pub fn value(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<Group> for String {
-    fn from(group: Group) -> Self {
-        group.0
-    }
-}
-
-impl ToBytes for Group {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        self.0.to_bytes()
-    }
-
-    fn serialized_length(&self) -> usize {
-        self.0.serialized_length()
-    }
-
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.value().write_bytes(writer)?;
-        Ok(())
-    }
-}
-
-impl FromBytes for Group {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        String::from_bytes(bytes).map(|(label, bytes)| (Group(label), bytes))
-    }
-}
-
 /// Automatically incremented value for a contract version within a major `ProtocolVersion`.
 pub type ContractVersion = u32;
 
@@ -257,7 +221,8 @@ pub const CONTRACT_INITIAL_VERSION: ContractVersion = 1;
 pub type ProtocolVersionMajor = u32;
 
 /// Major element of `ProtocolVersion` combined with `ContractVersion`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 pub struct ContractVersionKey(ProtocolVersionMajor, ContractVersion);
 
@@ -331,9 +296,6 @@ pub type ContractVersions = BTreeMap<ContractVersionKey, ContractHash>;
 /// contract versions to be executed.
 pub type DisabledVersions = BTreeSet<ContractVersionKey>;
 
-/// Collection of named groups.
-pub type Groups = BTreeMap<Group, BTreeSet<URef>>;
-
 /// A newtype wrapping a `HashAddr` which references a [`Contract`] in the global state.
 #[derive(Default, PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Copy)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
@@ -390,6 +352,12 @@ impl Debug for ContractHash {
 impl CLTyped for ContractHash {
     fn cl_type() -> CLType {
         CLType::ByteArray(KEY_HASH_LENGTH as u32)
+    }
+}
+
+impl From<AddressableEntityHash> for ContractHash {
+    fn from(entity_hash: AddressableEntityHash) -> Self {
+        ContractHash::new(entity_hash.value())
     }
 }
 
@@ -509,22 +477,32 @@ impl ContractPackageHash {
 
     /// Formats the `ContractPackageHash` for users getting and putting.
     pub fn to_formatted_string(self) -> String {
-        format!("{}{}", PACKAGE_STRING_PREFIX, base16::encode_lower(&self.0),)
+        format!(
+            "{}{}",
+            CONTRACT_PACKAGE_STRING_PREFIX,
+            base16::encode_lower(&self.0),
+        )
     }
 
     /// Parses a string formatted as per `Self::to_formatted_string()` into a
     /// `ContractPackageHash`.
     pub fn from_formatted_str(input: &str) -> Result<Self, FromStrError> {
         let remainder = input
-            .strip_prefix(PACKAGE_STRING_PREFIX)
+            .strip_prefix(CONTRACT_PACKAGE_STRING_PREFIX)
             .ok_or(FromStrError::InvalidPrefix)?;
 
         let hex_addr = remainder
-            .strip_prefix(PACKAGE_STRING_LEGACY_EXTRA_PREFIX)
+            .strip_prefix(CONTRACT_PACKAGE_STRING_LEGACY_EXTRA_PREFIX)
             .unwrap_or(remainder);
 
         let bytes = HashAddr::try_from(checksummed_hex::decode(hex_addr)?.as_ref())?;
         Ok(ContractPackageHash(bytes))
+    }
+}
+
+impl From<PackageHash> for ContractPackageHash {
+    fn from(value: PackageHash) -> Self {
+        ContractPackageHash::new(value.value())
     }
 }
 
@@ -703,12 +681,19 @@ impl FromBytes for ContractPackageStatus {
 }
 
 /// Contract definition, metadata, and security container.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 pub struct ContractPackage {
     /// Key used to add or disable versions
     access_key: URef,
     /// All versions (enabled & disabled)
+    #[cfg_attr(
+        feature = "json-schema",
+        schemars(
+            with = "Vec<crate::serde_helpers::contract_package::HumanReadableContractVersion>"
+        )
+    )]
     versions: ContractVersions,
     /// Disabled versions
     disabled_versions: DisabledVersions,
@@ -750,57 +735,46 @@ impl ContractPackage {
         self.access_key
     }
 
-    /// Get the mutable group definitions for this contract.
-    pub fn groups_mut(&mut self) -> &mut Groups {
-        &mut self.groups
-    }
-
     /// Get the group definitions for this contract.
     pub fn groups(&self) -> &Groups {
         &self.groups
     }
 
-    /// Adds new group to this contract.
-    pub fn add_group(&mut self, group: Group, urefs: BTreeSet<URef>) {
-        let v = self.groups.entry(group).or_default();
-        v.extend(urefs)
+    /// Returns reference to all of this contract's versions.
+    pub fn versions(&self) -> &ContractVersions {
+        &self.versions
     }
 
-    /// Lookup the contract hash for a given contract version (if present)
-    pub fn lookup_contract_hash(
-        &self,
-        contract_version_key: ContractVersionKey,
-    ) -> Option<&ContractHash> {
-        if !self.is_version_enabled(contract_version_key) {
-            return None;
+    /// Returns mutable reference to all of this contract's versions (enabled and disabled).
+    pub fn versions_mut(&mut self) -> &mut ContractVersions {
+        &mut self.versions
+    }
+
+    /// Consumes the object and returns all of this contract's versions (enabled and disabled).
+    pub fn take_versions(self) -> ContractVersions {
+        self.versions
+    }
+
+    /// Returns all of this contract's disabled versions.
+    pub fn disabled_versions(&self) -> &DisabledVersions {
+        &self.disabled_versions
+    }
+
+    /// Returns mut reference to all of this contract's disabled versions.
+    pub fn disabled_versions_mut(&mut self) -> &mut DisabledVersions {
+        &mut self.disabled_versions
+    }
+
+    /// Returns lock_status of the contract package.
+    pub fn lock_status(&self) -> ContractPackageStatus {
+        self.lock_status.clone()
+    }
+
+    pub fn is_locked(&self) -> bool {
+        match self.lock_status {
+            ContractPackageStatus::Locked => true,
+            ContractPackageStatus::Unlocked => false,
         }
-        self.versions.get(&contract_version_key)
-    }
-
-    /// Returns `true` if the given contract version exists and is enabled.
-    pub fn is_version_enabled(&self, contract_version_key: ContractVersionKey) -> bool {
-        !self.disabled_versions.contains(&contract_version_key)
-            && self.versions.contains_key(&contract_version_key)
-    }
-
-    /// Returns `true` if the given contract hash exists and is enabled.
-    pub fn is_contract_enabled(&self, contract_hash: &ContractHash) -> bool {
-        match self.find_contract_version_key_by_hash(contract_hash) {
-            Some(version_key) => !self.disabled_versions.contains(version_key),
-            None => false,
-        }
-    }
-
-    /// Insert a new contract version; the next sequential version number will be issued.
-    pub fn insert_contract_version(
-        &mut self,
-        protocol_version_major: ProtocolVersionMajor,
-        contract_hash: ContractHash,
-    ) -> ContractVersionKey {
-        let contract_version = self.next_contract_version_for(protocol_version_major);
-        let key = ContractVersionKey::new(protocol_version_major, contract_version);
-        self.versions.insert(key, contract_hash);
-        key
     }
 
     /// Disable the contract version corresponding to the given hash (if it exists).
@@ -839,49 +813,10 @@ impl ContractPackage {
             .next()
     }
 
-    /// Returns reference to all of this contract's versions.
-    pub fn versions(&self) -> &ContractVersions {
-        &self.versions
-    }
-
-    /// Returns all of this contract's enabled contract versions.
-    pub fn enabled_versions(&self) -> ContractVersions {
-        let mut ret = ContractVersions::new();
-        for version in &self.versions {
-            if !self.is_version_enabled(*version.0) {
-                continue;
-            }
-            ret.insert(*version.0, *version.1);
-        }
-        ret
-    }
-
-    /// Returns mutable reference to all of this contract's versions (enabled and disabled).
-    pub fn versions_mut(&mut self) -> &mut ContractVersions {
-        &mut self.versions
-    }
-
-    /// Consumes the object and returns all of this contract's versions (enabled and disabled).
-    pub fn take_versions(self) -> ContractVersions {
-        self.versions
-    }
-
-    /// Returns all of this contract's disabled versions.
-    pub fn disabled_versions(&self) -> &DisabledVersions {
-        &self.disabled_versions
-    }
-
-    /// Returns mut reference to all of this contract's disabled versions.
-    pub fn disabled_versions_mut(&mut self) -> &mut DisabledVersions {
-        &mut self.disabled_versions
-    }
-
-    /// Removes a group from this contract (if it exists).
+    /// Removes a group from this entity (if it exists).
     pub fn remove_group(&mut self, group: &Group) -> bool {
-        self.groups.remove(group).is_some()
+        self.groups.0.remove(group).is_some()
     }
-
-    /// Gets the next available contract version for the given protocol version
     fn next_contract_version_for(&self, protocol_version: ProtocolVersionMajor) -> ContractVersion {
         let current_version = self
             .versions
@@ -899,6 +834,24 @@ impl ContractPackage {
         current_version + 1
     }
 
+    /// Returns `true` if the given contract version exists and is enabled.
+    pub fn is_version_enabled(&self, contract_version_key: ContractVersionKey) -> bool {
+        !self.disabled_versions.contains(&contract_version_key)
+            && self.versions.contains_key(&contract_version_key)
+    }
+
+    /// Returns all of this contract's enabled contract versions.
+    pub fn enabled_versions(&self) -> ContractVersions {
+        let mut ret = ContractVersions::new();
+        for version in &self.versions {
+            if !self.is_version_enabled(*version.0) {
+                continue;
+            }
+            ret.insert(*version.0, *version.1);
+        }
+        ret
+    }
+
     /// Return the contract version key for the newest enabled contract version.
     pub fn current_contract_version(&self) -> Option<ContractVersionKey> {
         self.enabled_versions().keys().next_back().copied()
@@ -909,17 +862,45 @@ impl ContractPackage {
         self.enabled_versions().values().next_back().copied()
     }
 
-    /// Return the lock status of the contract package.
-    pub fn is_locked(&self) -> bool {
-        match self.lock_status {
-            ContractPackageStatus::Unlocked => false,
-            ContractPackageStatus::Locked => true,
-        }
+    pub fn insert_contract_version(
+        &mut self,
+        protocol_version_major: ProtocolVersionMajor,
+        contract_hash: ContractHash,
+    ) -> ContractVersionKey {
+        let contract_version = self.next_contract_version_for(protocol_version_major);
+        let key = ContractVersionKey::new(protocol_version_major, contract_version);
+        self.versions.insert(key, contract_hash);
+        key
     }
 
-    /// Return the package status itself
-    pub fn get_lock_status(&self) -> ContractPackageStatus {
-        self.lock_status.clone()
+    pub fn groups_mut(&mut self) -> &mut Groups {
+        &mut self.groups
+    }
+}
+
+impl Serialize for ContractPackage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            HumanReadableContractPackage::from(self).serialize(serializer)
+        } else {
+            let bytes = self
+                .to_bytes()
+                .map_err(|error| ser::Error::custom(format!("{:?}", error)))?;
+            ByteBuf::from(bytes).serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ContractPackage {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if deserializer.is_human_readable() {
+            let json_helper = HumanReadableContractPackage::deserialize(deserializer)?;
+            json_helper.try_into().map_err(de::Error::custom)
+        } else {
+            let bytes = ByteBuf::deserialize(deserializer)?.into_vec();
+            bytesrepr::deserialize::<ContractPackage>(bytes)
+                .map_err(|error| de::Error::custom(format!("{:?}", error)))
+        }
     }
 }
 
@@ -971,338 +952,44 @@ impl FromBytes for ContractPackage {
     }
 }
 
-/// Type alias for a container used inside [`EntryPoints`].
-pub type EntryPointsMap = BTreeMap<String, EntryPoint>;
-
-/// Collection of named entry points
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-pub struct EntryPoints(EntryPointsMap);
-
-impl Default for EntryPoints {
-    fn default() -> Self {
-        let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::default();
-        entry_points.add_entry_point(entry_point);
-        entry_points
-    }
-}
-
-impl ToBytes for EntryPoints {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        self.0.to_bytes()
-    }
-    fn serialized_length(&self) -> usize {
-        self.0.serialized_length()
-    }
-
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.0.write_bytes(writer)?;
-        Ok(())
-    }
-}
-
-impl FromBytes for EntryPoints {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (entry_points_map, rem) = EntryPointsMap::from_bytes(bytes)?;
-        Ok((EntryPoints(entry_points_map), rem))
-    }
-}
-
-impl EntryPoints {
-    /// Creates empty instance of [`EntryPoints`].
-    pub fn new() -> EntryPoints {
-        EntryPoints(EntryPointsMap::new())
-    }
-
-    /// Adds new [`EntryPoint`].
-    pub fn add_entry_point(&mut self, entry_point: EntryPoint) {
-        self.0.insert(entry_point.name().to_string(), entry_point);
-    }
-
-    /// Checks if given [`EntryPoint`] exists.
-    pub fn has_entry_point(&self, entry_point_name: &str) -> bool {
-        self.0.contains_key(entry_point_name)
-    }
-
-    /// Gets an existing [`EntryPoint`] by its name.
-    pub fn get(&self, entry_point_name: &str) -> Option<&EntryPoint> {
-        self.0.get(entry_point_name)
-    }
-
-    /// Returns iterator for existing entry point names.
-    pub fn keys(&self) -> impl Iterator<Item = &String> {
-        self.0.keys()
-    }
-
-    /// Takes all entry points.
-    pub fn take_entry_points(self) -> Vec<EntryPoint> {
-        self.0.into_values().collect()
-    }
-
-    /// Returns the length of the entry points
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Checks if the `EntryPoints` is empty.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl From<Vec<EntryPoint>> for EntryPoints {
-    fn from(entry_points: Vec<EntryPoint>) -> EntryPoints {
-        let entries = entry_points
+impl From<ContractPackage> for Package {
+    fn from(value: ContractPackage) -> Self {
+        let versions: BTreeMap<EntityVersionKey, AddressableEntityHash> = value
+            .versions
             .into_iter()
-            .map(|entry_point| (String::from(entry_point.name()), entry_point))
+            .map(|(version, contract_hash)| {
+                let entity_version = EntityVersionKey::new(2, version.contract_version());
+                let entity_hash: AddressableEntityHash =
+                    AddressableEntityHash::new(contract_hash.value());
+                (entity_version, entity_hash)
+            })
             .collect();
-        EntryPoints(entries)
-    }
-}
 
-/// Collection of named keys
-pub type NamedKeys = BTreeMap<String, Key>;
+        let disabled_versions = value
+            .disabled_versions
+            .into_iter()
+            .map(|contract_versions| {
+                EntityVersionKey::new(
+                    contract_versions.protocol_version_major(),
+                    contract_versions.contract_version(),
+                )
+            })
+            .collect();
 
-/// Methods and type signatures supported by a contract.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-pub struct Contract {
-    contract_package_hash: ContractPackageHash,
-    contract_wasm_hash: ContractWasmHash,
-    named_keys: NamedKeys,
-    entry_points: EntryPoints,
-    protocol_version: ProtocolVersion,
-}
+        let lock_status = if value.lock_status == ContractPackageStatus::Locked {
+            PackageStatus::Locked
+        } else {
+            PackageStatus::Unlocked
+        };
 
-impl From<Contract>
-    for (
-        ContractPackageHash,
-        ContractWasmHash,
-        NamedKeys,
-        EntryPoints,
-        ProtocolVersion,
-    )
-{
-    fn from(contract: Contract) -> Self {
-        (
-            contract.contract_package_hash,
-            contract.contract_wasm_hash,
-            contract.named_keys,
-            contract.entry_points,
-            contract.protocol_version,
+        Package::new(
+            versions.into(),
+            disabled_versions,
+            value.groups,
+            lock_status,
         )
     }
 }
-
-impl Contract {
-    /// `Contract` constructor.
-    pub fn new(
-        contract_package_hash: ContractPackageHash,
-        contract_wasm_hash: ContractWasmHash,
-        named_keys: NamedKeys,
-        entry_points: EntryPoints,
-        protocol_version: ProtocolVersion,
-    ) -> Self {
-        Contract {
-            contract_package_hash,
-            contract_wasm_hash,
-            named_keys,
-            entry_points,
-            protocol_version,
-        }
-    }
-
-    /// Hash for accessing contract package
-    pub fn contract_package_hash(&self) -> ContractPackageHash {
-        self.contract_package_hash
-    }
-
-    /// Hash for accessing contract WASM
-    pub fn contract_wasm_hash(&self) -> ContractWasmHash {
-        self.contract_wasm_hash
-    }
-
-    /// Checks whether there is a method with the given name
-    pub fn has_entry_point(&self, name: &str) -> bool {
-        self.entry_points.has_entry_point(name)
-    }
-
-    /// Returns the type signature for the given `method`.
-    pub fn entry_point(&self, method: &str) -> Option<&EntryPoint> {
-        self.entry_points.get(method)
-    }
-
-    /// Get the protocol version this header is targeting.
-    pub fn protocol_version(&self) -> ProtocolVersion {
-        self.protocol_version
-    }
-
-    /// Adds new entry point
-    pub fn add_entry_point<T: Into<String>>(&mut self, entry_point: EntryPoint) {
-        self.entry_points.add_entry_point(entry_point);
-    }
-
-    /// Hash for accessing contract bytes
-    pub fn contract_wasm_key(&self) -> Key {
-        self.contract_wasm_hash.into()
-    }
-
-    /// Returns immutable reference to methods
-    pub fn entry_points(&self) -> &EntryPoints {
-        &self.entry_points
-    }
-
-    /// Takes `named_keys`
-    pub fn take_named_keys(self) -> NamedKeys {
-        self.named_keys
-    }
-
-    /// Returns a reference to `named_keys`
-    pub fn named_keys(&self) -> &NamedKeys {
-        &self.named_keys
-    }
-
-    /// Appends `keys` to `named_keys`
-    pub fn named_keys_append(&mut self, keys: &mut NamedKeys) {
-        self.named_keys.append(keys);
-    }
-
-    /// Removes given named key.
-    pub fn remove_named_key(&mut self, key: &str) -> Option<Key> {
-        self.named_keys.remove(key)
-    }
-
-    /// Set protocol_version.
-    pub fn set_protocol_version(&mut self, protocol_version: ProtocolVersion) {
-        self.protocol_version = protocol_version;
-    }
-
-    /// Determines if `Contract` is compatible with a given `ProtocolVersion`.
-    pub fn is_compatible_protocol_version(&self, protocol_version: ProtocolVersion) -> bool {
-        self.protocol_version.value().major == protocol_version.value().major
-    }
-
-    /// Extracts the access rights from the named keys of the contract.
-    pub fn extract_access_rights(&self, contract_hash: ContractHash) -> ContextAccessRights {
-        let urefs_iter = self
-            .named_keys
-            .values()
-            .filter_map(|key| key.as_uref().copied());
-        ContextAccessRights::new(contract_hash.into(), urefs_iter)
-    }
-}
-
-impl ToBytes for Contract {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        let mut result = bytesrepr::allocate_buffer(self)?;
-        self.contract_package_hash().write_bytes(&mut result)?;
-        self.contract_wasm_hash().write_bytes(&mut result)?;
-        self.named_keys().write_bytes(&mut result)?;
-        self.entry_points().write_bytes(&mut result)?;
-        self.protocol_version().write_bytes(&mut result)?;
-        Ok(result)
-    }
-
-    fn serialized_length(&self) -> usize {
-        ToBytes::serialized_length(&self.entry_points)
-            + ToBytes::serialized_length(&self.contract_package_hash)
-            + ToBytes::serialized_length(&self.contract_wasm_hash)
-            + ToBytes::serialized_length(&self.protocol_version)
-            + ToBytes::serialized_length(&self.named_keys)
-    }
-
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.contract_package_hash().write_bytes(writer)?;
-        self.contract_wasm_hash().write_bytes(writer)?;
-        self.named_keys().write_bytes(writer)?;
-        self.entry_points().write_bytes(writer)?;
-        self.protocol_version().write_bytes(writer)?;
-        Ok(())
-    }
-}
-
-impl FromBytes for Contract {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (contract_package_hash, bytes) = FromBytes::from_bytes(bytes)?;
-        let (contract_wasm_hash, bytes) = FromBytes::from_bytes(bytes)?;
-        let (named_keys, bytes) = NamedKeys::from_bytes(bytes)?;
-        let (entry_points, bytes) = EntryPoints::from_bytes(bytes)?;
-        let (protocol_version, bytes) = ProtocolVersion::from_bytes(bytes)?;
-        Ok((
-            Contract {
-                contract_package_hash,
-                contract_wasm_hash,
-                named_keys,
-                entry_points,
-                protocol_version,
-            },
-            bytes,
-        ))
-    }
-}
-
-impl Default for Contract {
-    fn default() -> Self {
-        Contract {
-            named_keys: NamedKeys::default(),
-            entry_points: EntryPoints::default(),
-            contract_wasm_hash: [0; KEY_HASH_LENGTH].into(),
-            contract_package_hash: [0; KEY_HASH_LENGTH].into(),
-            protocol_version: ProtocolVersion::V1_0_0,
-        }
-    }
-}
-
-/// Context of method execution
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub enum EntryPointType {
-    /// Runs as session code
-    Session = 0,
-    /// Runs within contract's context
-    Contract = 1,
-}
-
-impl ToBytes for EntryPointType {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        (*self as u8).to_bytes()
-    }
-
-    fn serialized_length(&self) -> usize {
-        1
-    }
-
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        writer.push(*self as u8);
-        Ok(())
-    }
-}
-
-impl FromBytes for EntryPointType {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (value, bytes) = u8::from_bytes(bytes)?;
-        match value {
-            0 => Ok((EntryPointType::Session, bytes)),
-            1 => Ok((EntryPointType::Contract, bytes)),
-            _ => Err(bytesrepr::Error::Formatting),
-        }
-    }
-}
-
-/// Default name for an entry point
-pub const DEFAULT_ENTRY_POINT_NAME: &str = "call";
-
-/// Default name for an installer entry point
-pub const ENTRY_POINT_NAME_INSTALL: &str = "install";
-
-/// Default name for an upgrade entry point
-pub const UPGRADE_ENTRY_POINT_NAME: &str = "upgrade";
-
-/// Collection of entry point parameters.
-pub type Parameters = Vec<Parameter>;
 
 /// Type signature of a method. Order of arguments matter since can be
 /// referenced by index as well as name.
@@ -1389,21 +1076,16 @@ impl Default for EntryPoint {
             args: Vec::new(),
             ret: CLType::Unit,
             access: EntryPointAccess::Public,
-            entry_point_type: EntryPointType::Session,
+            entry_point_type: EntryPointType::Caller,
         }
     }
 }
 
 impl ToBytes for EntryPoint {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        let mut result = bytesrepr::allocate_buffer(self)?;
-        result.append(&mut self.name.to_bytes()?);
-        result.append(&mut self.args.to_bytes()?);
-        self.ret.append_bytes(&mut result)?;
-        result.append(&mut self.access.to_bytes()?);
-        result.append(&mut self.entry_point_type.to_bytes()?);
-
-        Ok(result)
+        let mut buffer = bytesrepr::allocate_buffer(self)?;
+        self.write_bytes(&mut buffer)?;
+        Ok(buffer)
     }
 
     fn serialized_length(&self) -> usize {
@@ -1415,11 +1097,11 @@ impl ToBytes for EntryPoint {
     }
 
     fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.name().write_bytes(writer)?;
+        self.name.write_bytes(writer)?;
         self.args.write_bytes(writer)?;
         self.ret.append_bytes(writer)?;
-        self.access().write_bytes(writer)?;
-        self.entry_point_type().write_bytes(writer)?;
+        self.access.write_bytes(writer)?;
+        self.entry_point_type.write_bytes(writer)?;
         Ok(())
     }
 }
@@ -1445,152 +1127,346 @@ impl FromBytes for EntryPoint {
     }
 }
 
-/// Enum describing the possible access control options for a contract entry
-/// point (method).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Collection of named entry points.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub enum EntryPointAccess {
-    /// Anyone can call this method (no access controls).
-    Public,
-    /// Only users from the listed groups may call this method. Note: if the
-    /// list is empty then this method is not callable from outside the
-    /// contract.
-    Groups(Vec<Group>),
-}
+#[serde(transparent, deny_unknown_fields)]
+pub struct EntryPoints(
+    #[serde(with = "BTreeMapToArray::<String, EntryPoint, EntryPointLabels>")]
+    BTreeMap<String, EntryPoint>,
+);
 
-const ENTRYPOINTACCESS_PUBLIC_TAG: u8 = 1;
-const ENTRYPOINTACCESS_GROUPS_TAG: u8 = 2;
-
-impl EntryPointAccess {
-    /// Constructor for access granted to only listed groups.
-    pub fn groups(labels: &[&str]) -> Self {
-        let list: Vec<Group> = labels.iter().map(|s| Group(String::from(*s))).collect();
-        EntryPointAccess::Groups(list)
+impl From<crate::addressable_entity::EntryPoints> for EntryPoints {
+    fn from(value: EntityEntryPoints) -> Self {
+        let mut ret = EntryPoints::new();
+        for entity_entry_point in value.take_entry_points() {
+            let entry_point = EntryPoint::new(
+                entity_entry_point.name(),
+                Parameters::from(entity_entry_point.args()),
+                entity_entry_point.ret().clone(),
+                entity_entry_point.access().clone(),
+                entity_entry_point.entry_point_type(),
+            );
+            ret.add_entry_point(entry_point);
+        }
+        ret
     }
 }
 
-impl ToBytes for EntryPointAccess {
+impl ToBytes for EntryPoints {
+    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
+        self.0.to_bytes()
+    }
+
+    fn serialized_length(&self) -> usize {
+        self.0.serialized_length()
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
+        self.0.write_bytes(writer)
+    }
+}
+
+impl FromBytes for EntryPoints {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
+        let (entry_points_map, remainder) = BTreeMap::<String, EntryPoint>::from_bytes(bytes)?;
+        Ok((EntryPoints(entry_points_map), remainder))
+    }
+}
+
+impl Default for EntryPoints {
+    fn default() -> Self {
+        let mut entry_points = EntryPoints::new();
+        let entry_point = EntryPoint::default();
+        entry_points.add_entry_point(entry_point);
+        entry_points
+    }
+}
+
+impl From<EntryPoint> for EntityEntryPoint {
+    fn from(value: EntryPoint) -> Self {
+        EntityEntryPoint::from(&value)
+    }
+}
+
+impl From<&EntryPoint> for EntityEntryPoint {
+    fn from(value: &EntryPoint) -> Self {
+        EntityEntryPoint::new(
+            value.name.clone(),
+            value.args.clone(),
+            value.ret.clone(),
+            value.access.clone(),
+            value.entry_point_type,
+            EntryPointPayment::Caller,
+        )
+    }
+}
+
+impl EntryPoints {
+    /// Constructs a new, empty `EntryPoints`.
+    pub const fn new() -> EntryPoints {
+        EntryPoints(BTreeMap::<String, EntryPoint>::new())
+    }
+
+    /// Constructs a new `EntryPoints` with a single entry for the default `EntryPoint`.
+    pub fn new_with_default_entry_point() -> Self {
+        let mut entry_points = EntryPoints::new();
+        let entry_point = EntryPoint::default();
+        entry_points.add_entry_point(entry_point);
+        entry_points
+    }
+
+    /// Adds new [`EntryPoint`].
+    pub fn add_entry_point(&mut self, entry_point: EntryPoint) {
+        self.0.insert(entry_point.name().to_string(), entry_point);
+    }
+
+    /// Checks if given [`EntryPoint`] exists.
+    pub fn has_entry_point(&self, entry_point_name: &str) -> bool {
+        self.0.contains_key(entry_point_name)
+    }
+
+    /// Gets an existing [`EntryPoint`] by its name.
+    pub fn get(&self, entry_point_name: &str) -> Option<&EntryPoint> {
+        self.0.get(entry_point_name)
+    }
+
+    /// Returns iterator for existing entry point names.
+    pub fn keys(&self) -> impl Iterator<Item = &String> {
+        self.0.keys()
+    }
+
+    /// Takes all entry points.
+    pub fn take_entry_points(self) -> Vec<EntryPoint> {
+        self.0.into_values().collect()
+    }
+
+    /// Returns the length of the entry points
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Checks if the `EntryPoints` is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Checks if any of the entry points are of the type Session.
+    pub fn contains_stored_session(&self) -> bool {
+        self.0
+            .values()
+            .any(|entry_point| entry_point.entry_point_type == EntryPointType::Caller)
+    }
+}
+
+impl From<Vec<EntryPoint>> for EntryPoints {
+    fn from(entry_points: Vec<EntryPoint>) -> EntryPoints {
+        let entries = entry_points
+            .into_iter()
+            .map(|entry_point| (String::from(entry_point.name()), entry_point))
+            .collect();
+        EntryPoints(entries)
+    }
+}
+
+impl From<EntryPoints> for EntityEntryPoints {
+    fn from(value: EntryPoints) -> Self {
+        let mut entry_points = EntityEntryPoints::new();
+        for contract_entry_point in value.take_entry_points() {
+            entry_points.add_entry_point(EntityEntryPoint::from(contract_entry_point));
+        }
+        entry_points
+    }
+}
+
+struct EntryPointLabels;
+
+impl KeyValueLabels for EntryPointLabels {
+    const KEY: &'static str = "name";
+    const VALUE: &'static str = "entry_point";
+}
+
+#[cfg(feature = "json-schema")]
+impl KeyValueJsonSchema for EntryPointLabels {
+    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("NamedEntryPoint");
+}
+
+/// Methods and type signatures supported by a contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "datasize", derive(DataSize))]
+#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
+pub struct Contract {
+    contract_package_hash: ContractPackageHash,
+    contract_wasm_hash: ContractWasmHash,
+    named_keys: NamedKeys,
+    entry_points: EntryPoints,
+    protocol_version: ProtocolVersion,
+}
+
+impl Contract {
+    /// `Contract` constructor.
+    pub fn new(
+        contract_package_hash: ContractPackageHash,
+        contract_wasm_hash: ContractWasmHash,
+        named_keys: NamedKeys,
+        entry_points: EntryPoints,
+        protocol_version: ProtocolVersion,
+    ) -> Self {
+        Contract {
+            contract_package_hash,
+            contract_wasm_hash,
+            named_keys,
+            entry_points,
+            protocol_version,
+        }
+    }
+
+    /// Hash for accessing contract package
+    pub fn contract_package_hash(&self) -> ContractPackageHash {
+        self.contract_package_hash
+    }
+
+    /// Hash for accessing contract WASM
+    pub fn contract_wasm_hash(&self) -> ContractWasmHash {
+        self.contract_wasm_hash
+    }
+
+    /// Checks whether there is a method with the given name
+    pub fn has_entry_point(&self, name: &str) -> bool {
+        self.entry_points.has_entry_point(name)
+    }
+
+    /// Returns the type signature for the given `method`.
+    pub fn entry_point(&self, method: &str) -> Option<&EntryPoint> {
+        self.entry_points.get(method)
+    }
+
+    /// Get the protocol version this header is targeting.
+    pub fn protocol_version(&self) -> ProtocolVersion {
+        self.protocol_version
+    }
+
+    /// Adds new entry point
+    pub fn add_entry_point<T: Into<String>>(&mut self, entry_point: EntryPoint) {
+        self.entry_points.add_entry_point(entry_point);
+    }
+
+    /// Hash for accessing contract bytes
+    pub fn contract_wasm_key(&self) -> Key {
+        self.contract_wasm_hash.into()
+    }
+
+    /// Returns immutable reference to methods
+    pub fn entry_points(&self) -> &EntryPoints {
+        &self.entry_points
+    }
+
+    /// Takes `named_keys`
+    pub fn take_named_keys(self) -> NamedKeys {
+        self.named_keys
+    }
+
+    /// Returns a reference to `named_keys`
+    pub fn named_keys(&self) -> &NamedKeys {
+        &self.named_keys
+    }
+
+    /// Appends `keys` to `named_keys`
+    pub fn named_keys_append(&mut self, keys: NamedKeys) {
+        self.named_keys.append(keys);
+    }
+
+    /// Removes given named key.
+    pub fn remove_named_key(&mut self, key: &str) -> Option<Key> {
+        self.named_keys.remove(key)
+    }
+
+    /// Set protocol_version.
+    pub fn set_protocol_version(&mut self, protocol_version: ProtocolVersion) {
+        self.protocol_version = protocol_version;
+    }
+
+    /// Determines if `Contract` is compatible with a given `ProtocolVersion`.
+    pub fn is_compatible_protocol_version(&self, protocol_version: ProtocolVersion) -> bool {
+        self.protocol_version.value().major == protocol_version.value().major
+    }
+}
+
+impl ToBytes for Contract {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut result = bytesrepr::allocate_buffer(self)?;
-
-        match self {
-            EntryPointAccess::Public => {
-                result.push(ENTRYPOINTACCESS_PUBLIC_TAG);
-            }
-            EntryPointAccess::Groups(groups) => {
-                result.push(ENTRYPOINTACCESS_GROUPS_TAG);
-                result.append(&mut groups.to_bytes()?);
-            }
-        }
+        self.contract_package_hash().write_bytes(&mut result)?;
+        self.contract_wasm_hash().write_bytes(&mut result)?;
+        self.named_keys().write_bytes(&mut result)?;
+        self.entry_points().write_bytes(&mut result)?;
+        self.protocol_version().write_bytes(&mut result)?;
         Ok(result)
     }
 
     fn serialized_length(&self) -> usize {
-        match self {
-            EntryPointAccess::Public => 1,
-            EntryPointAccess::Groups(groups) => 1 + groups.serialized_length(),
-        }
+        ToBytes::serialized_length(&self.entry_points)
+            + ToBytes::serialized_length(&self.contract_package_hash)
+            + ToBytes::serialized_length(&self.contract_wasm_hash)
+            + ToBytes::serialized_length(&self.protocol_version)
+            + ToBytes::serialized_length(&self.named_keys)
     }
 
     fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        match self {
-            EntryPointAccess::Public => {
-                writer.push(ENTRYPOINTACCESS_PUBLIC_TAG);
-            }
-            EntryPointAccess::Groups(groups) => {
-                writer.push(ENTRYPOINTACCESS_GROUPS_TAG);
-                groups.write_bytes(writer)?;
-            }
-        }
+        self.contract_package_hash().write_bytes(writer)?;
+        self.contract_wasm_hash().write_bytes(writer)?;
+        self.named_keys().write_bytes(writer)?;
+        self.entry_points().write_bytes(writer)?;
+        self.protocol_version().write_bytes(writer)?;
         Ok(())
     }
 }
 
-impl FromBytes for EntryPointAccess {
+impl FromBytes for Contract {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (tag, bytes) = u8::from_bytes(bytes)?;
+        let (contract_package_hash, bytes) = FromBytes::from_bytes(bytes)?;
+        let (contract_wasm_hash, bytes) = FromBytes::from_bytes(bytes)?;
+        let (named_keys, bytes) = NamedKeys::from_bytes(bytes)?;
+        let (entry_points, bytes) = EntryPoints::from_bytes(bytes)?;
+        let (protocol_version, bytes) = ProtocolVersion::from_bytes(bytes)?;
+        Ok((
+            Contract {
+                contract_package_hash,
+                contract_wasm_hash,
+                named_keys,
+                entry_points,
+                protocol_version,
+            },
+            bytes,
+        ))
+    }
+}
 
-        match tag {
-            ENTRYPOINTACCESS_PUBLIC_TAG => Ok((EntryPointAccess::Public, bytes)),
-            ENTRYPOINTACCESS_GROUPS_TAG => {
-                let (groups, bytes) = Vec::<Group>::from_bytes(bytes)?;
-                let result = EntryPointAccess::Groups(groups);
-                Ok((result, bytes))
-            }
-            _ => Err(bytesrepr::Error::Formatting),
+impl Default for Contract {
+    fn default() -> Self {
+        Contract {
+            named_keys: NamedKeys::default(),
+            entry_points: EntryPoints::default(),
+            contract_wasm_hash: [0; KEY_HASH_LENGTH].into(),
+            contract_package_hash: [0; KEY_HASH_LENGTH].into(),
+            protocol_version: ProtocolVersion::V1_0_0,
         }
     }
 }
 
-/// Parameter to a method
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub struct Parameter {
-    name: String,
-    cl_type: CLType,
-}
+/// Default name for an entry point
+pub const DEFAULT_ENTRY_POINT_NAME: &str = "call";
 
-impl Parameter {
-    /// `Parameter` constructor.
-    pub fn new<T: Into<String>>(name: T, cl_type: CLType) -> Self {
-        Parameter {
-            name: name.into(),
-            cl_type,
-        }
-    }
+/// Default name for an installer entry point
+pub const ENTRY_POINT_NAME_INSTALL: &str = "install";
 
-    /// Get the type of this argument.
-    pub fn cl_type(&self) -> &CLType {
-        &self.cl_type
-    }
-
-    /// Get a reference to the parameter's name.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-impl From<Parameter> for (String, CLType) {
-    fn from(parameter: Parameter) -> Self {
-        (parameter.name, parameter.cl_type)
-    }
-}
-
-impl ToBytes for Parameter {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
-        let mut result = ToBytes::to_bytes(&self.name)?;
-        self.cl_type.append_bytes(&mut result)?;
-
-        Ok(result)
-    }
-
-    fn serialized_length(&self) -> usize {
-        ToBytes::serialized_length(&self.name) + self.cl_type.serialized_length()
-    }
-
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.name.write_bytes(writer)?;
-        self.cl_type.append_bytes(writer)
-    }
-}
-
-impl FromBytes for Parameter {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (name, bytes) = String::from_bytes(bytes)?;
-        let (cl_type, bytes) = CLType::from_bytes(bytes)?;
-
-        Ok((Parameter { name, cl_type }, bytes))
-    }
-}
+/// Default name for an upgrade entry point
+pub const UPGRADE_ENTRY_POINT_NAME: &str = "upgrade";
 
 #[cfg(test)]
 mod tests {
-    use std::iter::FromIterator;
-
     use super::*;
-    use crate::{AccessRights, URef, UREF_ADDR_LENGTH};
+    use crate::{AccessRights, EntryPointAccess, EntryPointType, Group, Parameter, URef};
     use alloc::borrow::ToOwned;
 
     const CONTRACT_HASH_V1: ContractHash = ContractHash::new([42; 32]);
@@ -1630,7 +1506,7 @@ mod tests {
                 vec![],
                 CLType::U32,
                 EntryPointAccess::groups(&["Group 2"]),
-                EntryPointType::Session,
+                EntryPointType::Caller,
             );
             ret.insert(entrypoint.name().to_owned(), entrypoint);
             let entrypoint = EntryPoint::new(
@@ -1638,7 +1514,7 @@ mod tests {
                 vec![Parameter::new("Foo", CLType::U32)],
                 CLType::U32,
                 EntryPointAccess::groups(&["Group 1"]),
-                EntryPointType::Session,
+                EntryPointType::Caller,
             );
             ret.insert(entrypoint.name().to_owned(), entrypoint);
             ret
@@ -1660,30 +1536,6 @@ mod tests {
     }
 
     #[test]
-    fn next_contract_version() {
-        let major = 1;
-        let mut contract_package = ContractPackage::new(
-            URef::new([0; 32], AccessRights::NONE),
-            ContractVersions::default(),
-            DisabledVersions::default(),
-            Groups::default(),
-            ContractPackageStatus::default(),
-        );
-        assert_eq!(contract_package.next_contract_version_for(major), 1);
-
-        let next_version = contract_package.insert_contract_version(major, [123; 32].into());
-        assert_eq!(next_version, ContractVersionKey::new(major, 1));
-        assert_eq!(contract_package.next_contract_version_for(major), 2);
-        let next_version_2 = contract_package.insert_contract_version(major, [124; 32].into());
-        assert_eq!(next_version_2, ContractVersionKey::new(major, 2));
-
-        let major = 2;
-        assert_eq!(contract_package.next_contract_version_for(major), 1);
-        let next_version_3 = contract_package.insert_contract_version(major, [42; 32].into());
-        assert_eq!(next_version_3, ContractVersionKey::new(major, 1));
-    }
-
-    #[test]
     fn roundtrip_serialization() {
         let contract_package = make_contract_package();
         let bytes = contract_package.to_bytes().expect("should serialize");
@@ -1691,214 +1543,6 @@ mod tests {
             ContractPackage::from_bytes(&bytes).expect("should deserialize");
         assert_eq!(contract_package, decoded_package);
         assert_eq!(rem.len(), 0);
-    }
-
-    #[test]
-    fn should_remove_group() {
-        let mut contract_package = make_contract_package();
-
-        assert!(!contract_package.remove_group(&Group::new("Non-existent group")));
-        assert!(contract_package.remove_group(&Group::new("Group 1")));
-        assert!(!contract_package.remove_group(&Group::new("Group 1"))); // Group no longer exists
-    }
-
-    #[test]
-    fn should_disable_and_enable_contract_version() {
-        const NEW_CONTRACT_HASH: ContractHash = ContractHash::new([123; 32]);
-
-        let mut contract_package = make_contract_package();
-
-        assert!(
-            !contract_package.is_contract_enabled(&NEW_CONTRACT_HASH),
-            "nonexisting contract contract should return false"
-        );
-
-        assert_eq!(
-            contract_package.current_contract_version(),
-            Some(ContractVersionKey(1, 2))
-        );
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(CONTRACT_HASH_V2)
-        );
-
-        assert_eq!(
-            contract_package.versions(),
-            &BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2)
-            ]),
-        );
-        assert_eq!(
-            contract_package.enabled_versions(),
-            BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2)
-            ]),
-        );
-
-        assert!(!contract_package.is_contract_enabled(&NEW_CONTRACT_HASH));
-
-        assert_eq!(
-            contract_package.disable_contract_version(NEW_CONTRACT_HASH),
-            Err(Error::ContractNotFound),
-            "should return contract not found error"
-        );
-
-        assert!(
-            !contract_package.is_contract_enabled(&NEW_CONTRACT_HASH),
-            "disabling missing contract shouldnt change outcome"
-        );
-
-        let next_version = contract_package.insert_contract_version(1, NEW_CONTRACT_HASH);
-        assert!(
-            contract_package.is_version_enabled(next_version),
-            "version should exist and be enabled"
-        );
-        assert!(
-            contract_package.is_contract_enabled(&NEW_CONTRACT_HASH),
-            "contract should be enabled"
-        );
-
-        assert_eq!(
-            contract_package.disable_contract_version(NEW_CONTRACT_HASH),
-            Ok(()),
-            "should be able to disable version"
-        );
-        assert!(!contract_package.is_contract_enabled(&NEW_CONTRACT_HASH));
-
-        assert_eq!(
-            contract_package.lookup_contract_hash(next_version),
-            None,
-            "should not return disabled contract version"
-        );
-
-        assert!(
-            !contract_package.is_version_enabled(next_version),
-            "version should not be enabled"
-        );
-
-        assert_eq!(
-            contract_package.current_contract_version(),
-            Some(ContractVersionKey(1, 2))
-        );
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(CONTRACT_HASH_V2)
-        );
-        assert_eq!(
-            contract_package.versions(),
-            &BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2),
-                (next_version, NEW_CONTRACT_HASH),
-            ]),
-        );
-        assert_eq!(
-            contract_package.enabled_versions(),
-            BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2),
-            ]),
-        );
-        assert_eq!(
-            contract_package.disabled_versions(),
-            &BTreeSet::from_iter([next_version]),
-        );
-
-        assert_eq!(
-            contract_package.current_contract_version(),
-            Some(ContractVersionKey(1, 2))
-        );
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(CONTRACT_HASH_V2)
-        );
-
-        assert_eq!(
-            contract_package.disable_contract_version(CONTRACT_HASH_V2),
-            Ok(()),
-            "should be able to disable version 2"
-        );
-
-        assert_eq!(
-            contract_package.enabled_versions(),
-            BTreeMap::from_iter([(ContractVersionKey(1, 1), CONTRACT_HASH_V1),]),
-        );
-
-        assert_eq!(
-            contract_package.current_contract_version(),
-            Some(ContractVersionKey(1, 1))
-        );
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(CONTRACT_HASH_V1)
-        );
-
-        assert_eq!(
-            contract_package.disabled_versions(),
-            &BTreeSet::from_iter([next_version, ContractVersionKey(1, 2)]),
-        );
-
-        assert_eq!(
-            contract_package.enable_contract_version(CONTRACT_HASH_V2),
-            Ok(()),
-        );
-
-        assert_eq!(
-            contract_package.enabled_versions(),
-            BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2),
-            ]),
-        );
-
-        assert_eq!(
-            contract_package.disabled_versions(),
-            &BTreeSet::from_iter([next_version])
-        );
-
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(CONTRACT_HASH_V2)
-        );
-
-        assert_eq!(
-            contract_package.enable_contract_version(NEW_CONTRACT_HASH),
-            Ok(()),
-        );
-
-        assert_eq!(
-            contract_package.enable_contract_version(NEW_CONTRACT_HASH),
-            Ok(()),
-            "enabling a contract twice should be a noop"
-        );
-
-        assert_eq!(
-            contract_package.enabled_versions(),
-            BTreeMap::from_iter([
-                (ContractVersionKey(1, 1), CONTRACT_HASH_V1),
-                (ContractVersionKey(1, 2), CONTRACT_HASH_V2),
-                (next_version, NEW_CONTRACT_HASH),
-            ]),
-        );
-
-        assert_eq!(contract_package.disabled_versions(), &BTreeSet::new(),);
-
-        assert_eq!(
-            contract_package.current_contract_hash(),
-            Some(NEW_CONTRACT_HASH)
-        );
-    }
-
-    #[test]
-    fn should_not_allow_to_enable_non_existing_version() {
-        let mut contract_package = make_contract_package();
-
-        assert_eq!(
-            contract_package.enable_contract_version(ContractHash::default()),
-            Err(Error::ContractNotFound),
-        );
     }
 
     #[test]
@@ -2050,34 +1694,44 @@ mod tests {
     }
 
     #[test]
-    fn should_extract_access_rights() {
-        let contract_hash = ContractHash([255; 32]);
-        let uref = URef::new([84; UREF_ADDR_LENGTH], AccessRights::READ_ADD);
-        let uref_r = URef::new([42; UREF_ADDR_LENGTH], AccessRights::READ);
-        let uref_a = URef::new([42; UREF_ADDR_LENGTH], AccessRights::ADD);
-        let uref_w = URef::new([42; UREF_ADDR_LENGTH], AccessRights::WRITE);
-        let mut named_keys = NamedKeys::new();
-        named_keys.insert("a".to_string(), Key::URef(uref_r));
-        named_keys.insert("b".to_string(), Key::URef(uref_a));
-        named_keys.insert("c".to_string(), Key::URef(uref_w));
-        named_keys.insert("d".to_string(), Key::URef(uref));
-        let contract = Contract::new(
-            ContractPackageHash::new([254; 32]),
-            ContractWasmHash::new([253; 32]),
-            named_keys,
-            EntryPoints::default(),
-            ProtocolVersion::V1_0_0,
+    fn package_hash_from_legacy_str() {
+        let package_hash = ContractPackageHash([3; 32]);
+        let hex_addr = package_hash.to_string();
+        let legacy_encoded = format!("contract-package-wasm{}", hex_addr);
+        let decoded_from_legacy = ContractPackageHash::from_formatted_str(&legacy_encoded)
+            .expect("should accept legacy prefixed string");
+        assert_eq!(
+            package_hash, decoded_from_legacy,
+            "decoded_from_legacy should equal decoded"
         );
-        let access_rights = contract.extract_access_rights(contract_hash);
-        let expected_uref = URef::new([42; UREF_ADDR_LENGTH], AccessRights::READ_ADD_WRITE);
-        assert!(
-            access_rights.has_access_rights_to_uref(&uref),
-            "urefs in named keys should be included in access rights"
-        );
-        assert!(
-            access_rights.has_access_rights_to_uref(&expected_uref),
-            "multiple access right bits to the same uref should coalesce"
-        );
+
+        let invalid_prefix =
+            "contract-packagewasm0000000000000000000000000000000000000000000000000000000000000000";
+        assert!(matches!(
+            ContractPackageHash::from_formatted_str(invalid_prefix).unwrap_err(),
+            FromStrError::InvalidPrefix
+        ));
+
+        let short_addr =
+            "contract-package-wasm00000000000000000000000000000000000000000000000000000000000000";
+        assert!(matches!(
+            ContractPackageHash::from_formatted_str(short_addr).unwrap_err(),
+            FromStrError::Hash(_)
+        ));
+
+        let long_addr =
+            "contract-package-wasm000000000000000000000000000000000000000000000000000000000000000000";
+        assert!(matches!(
+            ContractPackageHash::from_formatted_str(long_addr).unwrap_err(),
+            FromStrError::Hash(_)
+        ));
+
+        let invalid_hex =
+            "contract-package-wasm000000000000000000000000000000000000000000000000000000000000000g";
+        assert!(matches!(
+            ContractPackageHash::from_formatted_str(invalid_hex).unwrap_err(),
+            FromStrError::Hex(_)
+        ));
     }
 }
 
@@ -2085,13 +1739,13 @@ mod tests {
 mod prop_tests {
     use proptest::prelude::*;
 
-    use crate::{bytesrepr, gens};
+    use crate::{bytesrepr, contracts::ContractPackage, gens};
 
     proptest! {
-        // #![proptest_config(ProptestConfig {
-        //     cases: 1024,
-        //     .. ProptestConfig::default()
-        // })]
+        #![proptest_config(ProptestConfig {
+            cases: 1024,
+            .. ProptestConfig::default()
+        })]
 
         #[test]
         fn test_value_contract(contract in gens::contract_arb()) {
@@ -2101,6 +1755,13 @@ mod prop_tests {
         #[test]
         fn test_value_contract_package(contract_pkg in gens::contract_package_arb()) {
             bytesrepr::test_serialization_roundtrip(&contract_pkg);
+        }
+
+        #[test]
+        fn test_json_contract_package(v in gens::contract_package_arb()) {
+            let json_str = serde_json::to_string(&v).unwrap();
+            let deserialized = serde_json::from_str::<ContractPackage>(&json_str).unwrap();
+            assert_eq!(v, deserialized);
         }
     }
 }

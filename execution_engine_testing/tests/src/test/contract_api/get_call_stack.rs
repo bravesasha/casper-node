@@ -1,16 +1,16 @@
 use num_traits::One;
 
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, WasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequest, ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
+    LOCAL_GENESIS_REQUEST,
 };
-use casper_execution_engine::{
-    core::engine_state::{Error as CoreError, ExecError, ExecuteRequest},
-    storage::global_state::in_memory::InMemoryGlobalState,
-};
+use casper_execution_engine::{engine_state::Error as CoreError, execution::ExecError};
 use casper_types::{
-    account::Account, runtime_args, system::CallStackElement, CLValue, ContractHash,
-    ContractPackageHash, EntryPointType, HashAddr, Key, RuntimeArgs, StoredValue, U512,
+    account::{Account, AccountHash},
+    contracts::{ContractHash, ContractPackageHash},
+    runtime_args,
+    system::{Caller, CallerInfo},
+    CLValue, EntityAddr, EntryPointType, HashAddr, Key, PackageHash, StoredValue, U512,
 };
 
 use get_call_stack_recursive_subcall::{
@@ -31,7 +31,7 @@ fn stored_session(contract_hash: ContractHash) -> Call {
     Call {
         contract_address: ContractAddress::ContractHash(contract_hash),
         target_method: CONTRACT_FORWARDER_ENTRYPOINT_SESSION.to_string(),
-        entry_point_type: EntryPointType::Session,
+        entry_point_type: EntryPointType::Caller,
     }
 }
 
@@ -39,7 +39,7 @@ fn stored_versioned_session(contract_package_hash: ContractPackageHash) -> Call 
     Call {
         contract_address: ContractAddress::ContractPackageHash(contract_package_hash),
         target_method: CONTRACT_FORWARDER_ENTRYPOINT_SESSION.to_string(),
-        entry_point_type: EntryPointType::Session,
+        entry_point_type: EntryPointType::Caller,
     }
 }
 
@@ -47,7 +47,7 @@ fn stored_contract(contract_hash: ContractHash) -> Call {
     Call {
         contract_address: ContractAddress::ContractHash(contract_hash),
         target_method: CONTRACT_FORWARDER_ENTRYPOINT_CONTRACT.to_string(),
-        entry_point_type: EntryPointType::Contract,
+        entry_point_type: EntryPointType::Called,
     }
 }
 
@@ -55,11 +55,11 @@ fn stored_versioned_contract(contract_package_hash: ContractPackageHash) -> Call
     Call {
         contract_address: ContractAddress::ContractPackageHash(contract_package_hash),
         target_method: CONTRACT_FORWARDER_ENTRYPOINT_CONTRACT.to_string(),
-        entry_point_type: EntryPointType::Contract,
+        entry_point_type: EntryPointType::Called,
     }
 }
 
-fn store_contract(builder: &mut WasmTestBuilder<InMemoryGlobalState>, session_filename: &str) {
+fn store_contract(builder: &mut LmdbWasmTestBuilder, session_filename: &str) {
     let store_contract_request =
         ExecuteRequestBuilder::standard(*DEFAULT_ACCOUNT_ADDR, session_filename, runtime_args! {})
             .build();
@@ -71,21 +71,20 @@ fn store_contract(builder: &mut WasmTestBuilder<InMemoryGlobalState>, session_fi
 
 fn execute_and_assert_result(
     call_depth: usize,
-    builder: &mut InMemoryWasmTestBuilder,
+    builder: &mut LmdbWasmTestBuilder,
     execute_request: ExecuteRequest,
+    is_invalid_context: bool,
 ) {
     if call_depth == 0 {
         builder.exec(execute_request).commit().expect_success();
-    } else {
+    } else if is_invalid_context {
         builder.exec(execute_request).commit().expect_failure();
         let error = builder.get_error().expect("must have an error");
         assert!(matches!(
             error,
             // Call chains have stored contract trying to call stored session which we don't
-            // support and is an actual error. Due to variable opcode costs such
-            // execution may end up in a success (and fail with InvalidContext) or GasLimit when
-            // executing longer chains.
-            CoreError::Exec(ExecError::InvalidContext) | CoreError::Exec(ExecError::GasLimit)
+            // support and is an actual error.
+            CoreError::Exec(ExecError::InvalidContext)
         ));
     }
 }
@@ -109,29 +108,23 @@ impl AccountExt for Account {
         self.named_keys()
             .get(key)
             .cloned()
-            .and_then(Key::into_hash)
+            .and_then(Key::into_hash_addr)
             .unwrap()
     }
 }
 
 trait BuilderExt {
-    fn get_call_stack_from_session_context(
-        &mut self,
-        stored_call_stack_key: &str,
-    ) -> Vec<CallStackElement>;
+    fn get_call_stack_from_session_context(&mut self, stored_call_stack_key: &str) -> Vec<Caller>;
 
     fn get_call_stack_from_contract_context(
         &mut self,
         stored_call_stack_key: &str,
         contract_package_hash: HashAddr,
-    ) -> Vec<CallStackElement>;
+    ) -> Vec<Caller>;
 }
 
-impl BuilderExt for WasmTestBuilder<InMemoryGlobalState> {
-    fn get_call_stack_from_session_context(
-        &mut self,
-        stored_call_stack_key: &str,
-    ) -> Vec<CallStackElement> {
+impl BuilderExt for LmdbWasmTestBuilder {
+    fn get_call_stack_from_session_context(&mut self, stored_call_stack_key: &str) -> Vec<Caller> {
         let cl_value = self
             .query(
                 None,
@@ -140,19 +133,84 @@ impl BuilderExt for WasmTestBuilder<InMemoryGlobalState> {
             )
             .unwrap();
 
-        cl_value
-            .as_cl_value()
-            .cloned()
-            .map(CLValue::into_t::<Vec<CallStackElement>>)
+        let caller_info = cl_value
+            .into_cl_value()
+            .map(CLValue::into_t::<Vec<CallerInfo>>)
             .unwrap()
-            .unwrap()
+            .unwrap();
+
+        let mut callers = vec![];
+
+        for info in caller_info {
+            let kind = info.kind();
+            match kind {
+                0 => {
+                    let account_hash = info
+                        .get_field_by_index(0)
+                        .map(|val| {
+                            val.to_t::<Option<AccountHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 0 in fields")
+                        .expect("account hash must be some");
+                    callers.push(Caller::Initiator { account_hash });
+                }
+                3 => {
+                    let package_hash = info
+                        .get_field_by_index(1)
+                        .map(|val| {
+                            val.to_t::<Option<PackageHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 1 in fields")
+                        .expect("package hash must be some");
+                    let entity_addr = info
+                        .get_field_by_index(3)
+                        .map(|val| {
+                            val.to_t::<Option<EntityAddr>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 3 in fields")
+                        .expect("entity addr must be some");
+                    callers.push(Caller::Entity {
+                        package_hash,
+                        entity_addr,
+                    });
+                }
+                4 => {
+                    let contract_package_hash = info
+                        .get_field_by_index(2)
+                        .map(|val| {
+                            val.to_t::<Option<ContractPackageHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 2 in fields")
+                        .expect("contract package hash must be some");
+                    let contract_hash = info
+                        .get_field_by_index(4)
+                        .map(|val| {
+                            val.to_t::<Option<ContractHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 4 in fields")
+                        .expect("contract hash must be some");
+                    callers.push(Caller::SmartContract {
+                        contract_package_hash,
+                        contract_hash,
+                    });
+                }
+                _ => panic!("unhandled kind"),
+            }
+        }
+
+        callers
     }
 
     fn get_call_stack_from_contract_context(
         &mut self,
         stored_call_stack_key: &str,
         contract_package_hash: HashAddr,
-    ) -> Vec<CallStackElement> {
+    ) -> Vec<Caller> {
         let value = self
             .query(None, Key::Hash(contract_package_hash), &[])
             .unwrap();
@@ -172,24 +230,89 @@ impl BuilderExt for WasmTestBuilder<InMemoryGlobalState> {
             )
             .unwrap();
 
-        cl_value
-            .as_cl_value()
-            .cloned()
-            .map(CLValue::into_t::<Vec<CallStackElement>>)
+        let stack_elements = cl_value
+            .into_cl_value()
+            .map(CLValue::into_t::<Vec<CallerInfo>>)
             .unwrap()
-            .unwrap()
+            .unwrap();
+
+        let mut callers = vec![];
+
+        for info in stack_elements {
+            let kind = info.kind();
+            match kind {
+                0 => {
+                    let account_hash = info
+                        .get_field_by_index(0)
+                        .map(|val| {
+                            val.to_t::<Option<AccountHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 0 in fields")
+                        .expect("account hash must be some");
+                    callers.push(Caller::Initiator { account_hash });
+                }
+                3 => {
+                    let package_hash = info
+                        .get_field_by_index(1)
+                        .map(|val| {
+                            val.to_t::<Option<PackageHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 1 in fields")
+                        .expect("package hash must be some");
+                    let entity_addr = info
+                        .get_field_by_index(3)
+                        .map(|val| {
+                            val.to_t::<Option<EntityAddr>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 3 in fields")
+                        .expect("entity addr must be some");
+                    callers.push(Caller::Entity {
+                        package_hash,
+                        entity_addr,
+                    });
+                }
+                4 => {
+                    let contract_package_hash = info
+                        .get_field_by_index(2)
+                        .map(|val| {
+                            val.to_t::<Option<ContractPackageHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 2 in fields")
+                        .expect("contract package hash must be some");
+                    let contract_hash = info
+                        .get_field_by_index(4)
+                        .map(|val| {
+                            val.to_t::<Option<ContractHash>>()
+                                .expect("must convert out of cl_value")
+                        })
+                        .expect("must have index 4 in fields")
+                        .expect("contract hash must be some");
+                    callers.push(Caller::SmartContract {
+                        contract_package_hash,
+                        contract_hash,
+                    });
+                }
+                _ => panic!("unhandled kind"),
+            }
+        }
+
+        callers
     }
 }
 
-fn setup() -> WasmTestBuilder<InMemoryGlobalState> {
-    let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+fn setup() -> LmdbWasmTestBuilder {
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
     store_contract(&mut builder, CONTRACT_RECURSIVE_SUBCALL);
     builder
 }
 
 fn assert_each_context_has_correct_call_stack_info(
-    builder: &mut InMemoryWasmTestBuilder,
+    builder: &mut LmdbWasmTestBuilder,
     top_level_call: Call,
     mut subcalls: Vec<Call>,
     current_contract_package_hash: HashAddr,
@@ -203,11 +326,12 @@ fn assert_each_context_has_correct_call_stack_info(
         let stored_call_stack_key = format!("call_stack-{}", i);
         // we need to know where to look for the call stack information
         let call_stack = match call.entry_point_type {
-            EntryPointType::Contract => builder.get_call_stack_from_contract_context(
-                &stored_call_stack_key,
-                current_contract_package_hash,
-            ),
-            EntryPointType::Session => {
+            EntryPointType::Called | EntryPointType::Factory => builder
+                .get_call_stack_from_contract_context(
+                    &stored_call_stack_key,
+                    current_contract_package_hash,
+                ),
+            EntryPointType::Caller => {
                 builder.get_call_stack_from_session_context(&stored_call_stack_key)
             }
         };
@@ -223,7 +347,7 @@ fn assert_each_context_has_correct_call_stack_info(
 
         assert_eq!(
             head,
-            [CallStackElement::Session {
+            [Caller::Initiator {
                 account_hash: *DEFAULT_ACCOUNT_ADDR,
             }],
         );
@@ -231,22 +355,20 @@ fn assert_each_context_has_correct_call_stack_info(
     }
 }
 
-fn assert_invalid_context(builder: &mut InMemoryWasmTestBuilder, depth: usize) {
+fn assert_invalid_context(builder: &mut LmdbWasmTestBuilder, depth: usize) {
     if depth == 0 {
         builder.expect_success();
     } else {
         let error = builder.get_error().unwrap();
         assert!(matches!(
             error,
-            casper_execution_engine::core::engine_state::Error::Exec(
-                casper_execution_engine::core::execution::Error::InvalidContext
-            )
+            casper_execution_engine::engine_state::Error::Exec(ExecError::InvalidContext)
         ));
     }
 }
 
 fn assert_each_context_has_correct_call_stack_info_module_bytes(
-    builder: &mut InMemoryWasmTestBuilder,
+    builder: &mut LmdbWasmTestBuilder,
     subcalls: Vec<Call>,
     current_contract_package_hash: HashAddr,
 ) {
@@ -255,7 +377,7 @@ fn assert_each_context_has_correct_call_stack_info_module_bytes(
     let (head, _) = call_stack.split_at(usize::one());
     assert_eq!(
         head,
-        [CallStackElement::Session {
+        [Caller::Initiator {
             account_hash: *DEFAULT_ACCOUNT_ADDR,
         }],
     );
@@ -264,18 +386,19 @@ fn assert_each_context_has_correct_call_stack_info_module_bytes(
         let stored_call_stack_key = format!("call_stack-{}", i);
         // we need to know where to look for the call stack information
         let call_stack = match call.entry_point_type {
-            EntryPointType::Contract => builder.get_call_stack_from_contract_context(
-                &stored_call_stack_key,
-                current_contract_package_hash,
-            ),
-            EntryPointType::Session => {
+            EntryPointType::Called | EntryPointType::Factory => builder
+                .get_call_stack_from_contract_context(
+                    &stored_call_stack_key,
+                    current_contract_package_hash,
+                ),
+            EntryPointType::Caller => {
                 builder.get_call_stack_from_session_context(&stored_call_stack_key)
             }
         };
         let (head, rest) = call_stack.split_at(usize::one());
         assert_eq!(
             head,
-            [CallStackElement::Session {
+            [Caller::Initiator {
                 account_hash: *DEFAULT_ACCOUNT_ADDR,
             }],
         );
@@ -283,7 +406,7 @@ fn assert_each_context_has_correct_call_stack_info_module_bytes(
     }
 }
 
-fn assert_call_stack_matches_calls(call_stack: Vec<CallStackElement>, calls: &[Call]) {
+fn assert_call_stack_matches_calls(call_stack: Vec<Caller>, calls: &[Call]) {
     for (index, expected_call_stack_element) in call_stack.iter().enumerate() {
         let maybe_call = calls.get(index);
         match (maybe_call, expected_call_stack_element) {
@@ -295,23 +418,23 @@ fn assert_call_stack_matches_calls(call_stack: Vec<CallStackElement>, calls: &[C
                         ContractAddress::ContractPackageHash(current_contract_package_hash),
                     ..
                 }),
-                CallStackElement::StoredContract {
+                Caller::SmartContract {
                     contract_package_hash,
                     ..
                 },
-            ) if *entry_point_type == EntryPointType::Contract
-                && *contract_package_hash == *current_contract_package_hash => {}
+            ) if *entry_point_type == EntryPointType::Called
+                && contract_package_hash.value() == current_contract_package_hash.value() => {}
 
-            // Unversioned Call with EntryPointType::Contract
+            // Unversioned Call with EntryPointType::Called
             (
                 Some(Call {
                     entry_point_type,
                     contract_address: ContractAddress::ContractHash(current_contract_hash),
                     ..
                 }),
-                CallStackElement::StoredContract { contract_hash, .. },
-            ) if *entry_point_type == EntryPointType::Contract
-                && *contract_hash == *current_contract_hash => {}
+                Caller::SmartContract { contract_hash, .. },
+            ) if *entry_point_type == EntryPointType::Called
+                && contract_hash.value() == current_contract_hash.value() => {}
 
             // Versioned Call with EntryPointType::Session
             (
@@ -321,13 +444,11 @@ fn assert_call_stack_matches_calls(call_stack: Vec<CallStackElement>, calls: &[C
                         ContractAddress::ContractPackageHash(current_contract_package_hash),
                     ..
                 }),
-                CallStackElement::StoredSession {
-                    account_hash,
+                Caller::SmartContract {
                     contract_package_hash,
                     ..
                 },
-            ) if *entry_point_type == EntryPointType::Session
-                && *account_hash == *DEFAULT_ACCOUNT_ADDR
+            ) if *entry_point_type == EntryPointType::Caller
                 && *contract_package_hash == *current_contract_package_hash => {}
 
             // Unversioned Call with EntryPointType::Session
@@ -337,14 +458,9 @@ fn assert_call_stack_matches_calls(call_stack: Vec<CallStackElement>, calls: &[C
                     contract_address: ContractAddress::ContractHash(current_contract_hash),
                     ..
                 }),
-                CallStackElement::StoredSession {
-                    account_hash,
-                    contract_hash,
-                    ..
-                },
-            ) if *entry_point_type == EntryPointType::Session
-                && *account_hash == *DEFAULT_ACCOUNT_ADDR
-                && *contract_hash == *current_contract_hash => {}
+                Caller::SmartContract { contract_hash, .. },
+            ) if *entry_point_type == EntryPointType::Caller
+                && contract_hash.value() == current_contract_hash.value() => {}
 
             _ => panic!(
                 "call stack element {:#?} didn't match expected call {:#?} at index {}, {:#?}",
@@ -355,9 +471,9 @@ fn assert_call_stack_matches_calls(call_stack: Vec<CallStackElement>, calls: &[C
 }
 
 mod session {
+
     use casper_engine_test_support::{ExecuteRequestBuilder, DEFAULT_ACCOUNT_ADDR};
-    use casper_execution_engine::shared::transform::Transform;
-    use casper_types::{runtime_args, system::mint, Key, RuntimeArgs};
+    use casper_types::{execution::TransformKindV2, runtime_args, system::mint, Key};
 
     use super::{
         approved_amount, AccountExt, ARG_CALLS, ARG_CURRENT_DEPTH, CONTRACT_CALL_RECURSIVE_SUBCALL,
@@ -518,6 +634,7 @@ mod session {
         for len in DEPTHS {
             let mut builder = super::setup();
             let default_account = builder.get_account(*DEFAULT_ACCOUNT_ADDR).unwrap();
+            println!("{:?}", default_account);
             let current_contract_package_hash = default_account.get_hash(CONTRACT_PACKAGE_NAME);
 
             let mut subcalls =
@@ -1007,12 +1124,20 @@ mod session {
 
             builder.exec(execute_request).commit().expect_success();
 
-            let transforms = builder.get_execution_journals().last().unwrap().clone();
+            let effects = builder.get_effects().last().unwrap().clone();
+
+            let key = if builder.chainspec().core_config.enable_addressable_entity {
+                Key::SmartContract(current_contract_package_hash)
+            } else {
+                Key::Hash(current_contract_package_hash)
+            };
 
             assert!(
-                transforms.iter().any(|(key, transform)| key
-                    == &Key::Hash(current_contract_package_hash)
-                    && transform == &Transform::Identity),
+                effects
+                    .transforms()
+                    .iter()
+                    .any(|transform| transform.key() == &key
+                        && transform.kind() == &TransformKindV2::Identity),
                 "Missing `Identity` transform for a contract package being called."
             );
 
@@ -1156,13 +1281,12 @@ mod session {
 
             builder.exec(execute_request).commit().expect_success();
 
-            let transforms = builder.get_execution_journals().last().unwrap().clone();
+            let effects = builder.get_effects().last().unwrap().clone();
 
             assert!(
-                transforms
-                    .iter()
-                    .any(|(key, transform)| key == &Key::Hash(current_contract_hash)
-                        && transform == &Transform::Identity),
+                effects.transforms().iter().any(|transform| transform.key()
+                    == &Key::Hash(current_contract_hash)
+                    && transform.kind() == &TransformKindV2::Identity),
                 "Missing `Identity` transform for a contract being called."
             );
 
@@ -2624,7 +2748,7 @@ mod payment {
     use rand::Rng;
 
     use casper_engine_test_support::{
-        DeployItemBuilder, ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
+        DeployItemBuilder, ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
     };
     use casper_types::{runtime_args, system::mint, HashAddr, RuntimeArgs};
     use get_call_stack_recursive_subcall::Call;
@@ -2640,7 +2764,12 @@ mod payment {
     // vector.  Going further than 6 will hit the gas limit.
     const DEPTHS: &[usize] = &[0, 6, 10];
 
-    fn execute(builder: &mut InMemoryWasmTestBuilder, call_depth: usize, subcalls: Vec<Call>) {
+    fn execute(
+        builder: &mut LmdbWasmTestBuilder,
+        call_depth: usize,
+        subcalls: Vec<Call>,
+        is_invalid_context: bool,
+    ) {
         let execute_request = {
             let mut rng = rand::thread_rng();
             let deploy_hash = rng.gen();
@@ -2657,14 +2786,14 @@ mod payment {
                 .with_authorization_keys(&[sender])
                 .with_deploy_hash(deploy_hash)
                 .build();
-            ExecuteRequestBuilder::new().push_deploy(deploy).build()
+            ExecuteRequestBuilder::from_deploy_item(&deploy).build()
         };
 
-        super::execute_and_assert_result(call_depth, builder, execute_request);
+        super::execute_and_assert_result(call_depth, builder, execute_request, is_invalid_context);
     }
 
     fn execute_stored_payment_by_package_name(
-        builder: &mut InMemoryWasmTestBuilder,
+        builder: &mut LmdbWasmTestBuilder,
         call_depth: usize,
         subcalls: Vec<Call>,
     ) {
@@ -2693,14 +2822,14 @@ mod payment {
                 .with_deploy_hash(deploy_hash)
                 .build();
 
-            ExecuteRequestBuilder::new().push_deploy(deploy).build()
+            ExecuteRequestBuilder::from_deploy_item(&deploy).build()
         };
 
-        super::execute_and_assert_result(call_depth, builder, execute_request);
+        super::execute_and_assert_result(call_depth, builder, execute_request, false);
     }
 
     fn execute_stored_payment_by_package_hash(
-        builder: &mut InMemoryWasmTestBuilder,
+        builder: &mut LmdbWasmTestBuilder,
         call_depth: usize,
         subcalls: Vec<Call>,
         current_contract_package_hash: HashAddr,
@@ -2726,14 +2855,14 @@ mod payment {
                 .with_authorization_keys(&[sender])
                 .with_deploy_hash(deploy_hash)
                 .build();
-            ExecuteRequestBuilder::new().push_deploy(deploy).build()
+            ExecuteRequestBuilder::from_deploy_item(&deploy).build()
         };
 
-        super::execute_and_assert_result(call_depth, builder, execute_request);
+        super::execute_and_assert_result(call_depth, builder, execute_request, false);
     }
 
     fn execute_stored_payment_by_contract_name(
-        builder: &mut InMemoryWasmTestBuilder,
+        builder: &mut LmdbWasmTestBuilder,
         call_depth: usize,
         subcalls: Vec<Call>,
     ) {
@@ -2761,14 +2890,14 @@ mod payment {
                 .with_deploy_hash(deploy_hash)
                 .build();
 
-            ExecuteRequestBuilder::new().push_deploy(deploy).build()
+            ExecuteRequestBuilder::from_deploy_item(&deploy).build()
         };
 
-        super::execute_and_assert_result(call_depth, builder, execute_request);
+        super::execute_and_assert_result(call_depth, builder, execute_request, false);
     }
 
     fn execute_stored_payment_by_contract_hash(
-        builder: &mut InMemoryWasmTestBuilder,
+        builder: &mut LmdbWasmTestBuilder,
         call_depth: usize,
         subcalls: Vec<Call>,
         current_contract_hash: HashAddr,
@@ -2793,10 +2922,10 @@ mod payment {
                 .with_authorization_keys(&[sender])
                 .with_deploy_hash(deploy_hash)
                 .build();
-            ExecuteRequestBuilder::new().push_deploy(deploy).build()
+            ExecuteRequestBuilder::from_deploy_item(&deploy).build()
         };
 
-        super::execute_and_assert_result(call_depth, builder, execute_request);
+        super::execute_and_assert_result(call_depth, builder, execute_request, false);
     }
 
     // Session + recursive subcall
@@ -2820,7 +2949,7 @@ mod payment {
                 ));
             }
 
-            execute(&mut builder, *call_depth, subcalls);
+            execute(&mut builder, *call_depth, subcalls, false);
         }
     }
 
@@ -2842,7 +2971,7 @@ mod payment {
                 subcalls.push(super::stored_contract(current_contract_hash.into()));
             }
 
-            execute(&mut builder, *call_depth, subcalls);
+            execute(&mut builder, *call_depth, subcalls, false);
         }
     }
 
@@ -2865,7 +2994,7 @@ mod payment {
                 ));
             }
 
-            execute(&mut builder, *call_depth, subcalls)
+            execute(&mut builder, *call_depth, subcalls, false)
         }
     }
 
@@ -2884,7 +3013,7 @@ mod payment {
             super::stored_contract(current_contract_hash.into()),
             super::stored_session(current_contract_hash.into()),
         ];
-        execute(&mut builder, call_depth, subcalls)
+        execute(&mut builder, call_depth, subcalls, true)
     }
 
     #[ignore]
@@ -2903,7 +3032,7 @@ mod payment {
         })
         .take(call_depth)
         .flatten();
-        execute(&mut builder, call_depth, subcalls.collect())
+        execute(&mut builder, call_depth, subcalls.collect(), false)
     }
 
     // Session + recursive subcall failure cases
@@ -2927,7 +3056,7 @@ mod payment {
                 ));
             }
 
-            execute(&mut builder, *call_depth, subcalls)
+            execute(&mut builder, *call_depth, subcalls, true)
         }
     }
 
@@ -2949,7 +3078,7 @@ mod payment {
                 subcalls.push(super::stored_session(current_contract_hash.into()));
             }
 
-            execute(&mut builder, *call_depth, subcalls)
+            execute(&mut builder, *call_depth, subcalls, true)
         }
     }
 
@@ -2972,7 +3101,7 @@ mod payment {
                 ));
             }
 
-            execute(&mut builder, *call_depth, subcalls)
+            execute(&mut builder, *call_depth, subcalls, true)
         }
     }
 
@@ -2992,7 +3121,7 @@ mod payment {
                 subcalls.push(super::stored_session(current_contract_hash.into()));
             }
 
-            execute(&mut builder, *call_depth, subcalls)
+            execute(&mut builder, *call_depth, subcalls, true)
         }
     }
 
@@ -3285,6 +3414,7 @@ mod payment {
         for call_depth in DEPTHS {
             let mut builder = super::setup();
             let default_account = builder.get_account(*DEFAULT_ACCOUNT_ADDR).unwrap();
+            println!("DA {:?}", default_account);
             let current_contract_hash = default_account.get_hash(CONTRACT_NAME);
 
             let subcalls = vec![super::stored_contract(current_contract_hash.into()); *call_depth];

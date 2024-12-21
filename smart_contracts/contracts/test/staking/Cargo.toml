@@ -1,0 +1,16 @@
+[package]
+name = "staking"
+version = "0.1.0"
+authors = ["Ed Hastings <ed@casper.network>"]
+edition = "2021"
+
+[[bin]]
+name = "staking"
+path = "src/bin/main.rs"
+doctest = false
+test = false
+bench = false
+
+[dependencies]
+casper-contract = { path = "../../../contract" }
+casper-types = { path = "../../../../types" }

@@ -10,14 +10,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::TempDir;
 
-use casper_engine_test_support::LmdbWasmTestBuilder;
-use casper_execution_engine::core::engine_state::{
-    run_genesis_request::RunGenesisRequest, EngineConfig,
-};
-use casper_hashing::Digest;
-use casper_types::ProtocolVersion;
+use casper_engine_test_support::{ChainspecConfig, LmdbWasmTestBuilder};
+use casper_storage::data_access_layer::GenesisRequest;
 #[cfg(test)]
 use casper_types::{AccessRights, Key, URef};
+use casper_types::{Digest, ProtocolVersion};
 
 pub const RELEASE_1_2_0: &str = "release_1_2_0";
 pub const RELEASE_1_3_1: &str = "release_1_3_1";
@@ -25,6 +22,7 @@ pub const RELEASE_1_4_2: &str = "release_1_4_2";
 pub const RELEASE_1_4_3: &str = "release_1_4_3";
 pub const RELEASE_1_4_4: &str = "release_1_4_4";
 pub const RELEASE_1_4_5: &str = "release_1_4_5";
+pub const RELEASE_1_5_8: &str = "release_1_5_8";
 const STATE_JSON_FILE: &str = "state.json";
 const FIXTURES_DIRECTORY: &str = "fixtures";
 const GENESIS_PROTOCOL_VERSION_FIELD: &str = "protocol_version";
@@ -39,7 +37,7 @@ pub(crate) fn is_fixture_generator_enabled() -> bool {
 
 /// This is a special place in the global state where fixture contains a registry.
 #[cfg(test)]
-pub(crate) const CONTRACT_REGISTRY_SPECIAL_ADDRESS: Key =
+pub(crate) const ENTRY_REGISTRY_SPECIAL_ADDRESS: Key =
     Key::URef(URef::new([0u8; 32], AccessRights::all()));
 
 fn path_to_lmdb_fixtures() -> PathBuf {
@@ -49,7 +47,7 @@ fn path_to_lmdb_fixtures() -> PathBuf {
 /// Contains serialized genesis config.
 #[derive(Serialize, Deserialize)]
 pub struct LmdbFixtureState {
-    /// Serializes as unstructured JSON value because [`RunGenesisRequest`] might change over time
+    /// Serializes as unstructured JSON value because [`GenesisRequest`] might change over time
     /// and likely old fixture might not deserialize cleanly in the future.
     pub genesis_request: serde_json::Value,
     pub post_state_hash: Digest,
@@ -90,7 +88,34 @@ pub fn builder_from_global_state_fixture(
     (
         LmdbWasmTestBuilder::open(
             &path_to_gs,
-            EngineConfig::default(),
+            ChainspecConfig::default(),
+            lmdb_fixture_state.genesis_protocol_version(),
+            lmdb_fixture_state.post_state_hash,
+        ),
+        lmdb_fixture_state,
+        to,
+    )
+}
+
+pub fn builder_from_global_state_fixture_with_enable_ae(
+    fixture_name: &str,
+    enable_addressable_entity: bool,
+) -> (LmdbWasmTestBuilder, LmdbFixtureState, TempDir) {
+    let source = path_to_lmdb_fixtures().join(fixture_name);
+    let to = tempfile::tempdir().expect("should create temp dir");
+    fs_extra::copy_items(&[source], &to, &dir::CopyOptions::default())
+        .expect("should copy global state fixture");
+
+    let path_to_state = to.path().join(fixture_name).join(STATE_JSON_FILE);
+    let lmdb_fixture_state: LmdbFixtureState =
+        serde_json::from_reader(File::open(path_to_state).unwrap()).unwrap();
+    let path_to_gs = to.path().join(fixture_name);
+
+    (
+        LmdbWasmTestBuilder::open(
+            &path_to_gs,
+            ChainspecConfig::default().with_enable_addressable_entity(enable_addressable_entity),
+            lmdb_fixture_state.genesis_protocol_version(),
             lmdb_fixture_state.post_state_hash,
         ),
         lmdb_fixture_state,
@@ -105,7 +130,7 @@ pub fn builder_from_global_state_fixture(
 /// control.
 pub fn generate_fixture(
     name: &str,
-    genesis_request: RunGenesisRequest,
+    genesis_request: GenesisRequest,
     post_genesis_setup: impl FnOnce(&mut LmdbWasmTestBuilder),
 ) -> Result<(), Box<dyn std::error::Error>> {
     let lmdb_fixtures_root = path_to_lmdb_fixtures();
@@ -122,10 +147,10 @@ pub fn generate_fixture(
         return Ok(());
     }
 
-    let engine_config = EngineConfig::default();
-    let mut builder = LmdbWasmTestBuilder::new_with_config(&fixture_root, engine_config);
+    let chainspec = ChainspecConfig::default();
+    let mut builder = LmdbWasmTestBuilder::new_with_config(&fixture_root, chainspec);
 
-    builder.run_genesis(&genesis_request);
+    builder.run_genesis(genesis_request.clone());
 
     // You can customize the fixture post genesis with a callable.
     post_genesis_setup(&mut builder);

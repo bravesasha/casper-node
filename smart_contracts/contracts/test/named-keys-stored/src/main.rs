@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use alloc::string::ToString;
+use alloc::{collections::BTreeMap, string::ToString};
 
 use casper_contract::{
     self,
@@ -11,9 +11,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::{NamedKeys, Parameters},
-    ApiError, CLType, ContractPackageHash, EntryPoint, EntryPointAccess, EntryPointType,
-    EntryPoints, Key, RuntimeArgs,
+    addressable_entity::Parameters, ApiError, CLType, EntryPoint, EntryPointAccess,
+    EntryPointPayment, EntryPointType, EntryPoints, Key, NamedKeys, PackageHash, RuntimeArgs,
 };
 
 const ENTRY_POINT_CONTRACT: &str = "named_keys_contract";
@@ -99,13 +98,13 @@ pub extern "C" fn named_keys_session() {
 
 #[no_mangle]
 pub extern "C" fn named_keys_contract_to_contract() {
-    let contract_hash = runtime::get_key(CONTRACT_PACKAGE_HASH_NAME)
-        .and_then(Key::into_hash)
-        .map(ContractPackageHash::new)
+    let package_hash = runtime::get_key(CONTRACT_PACKAGE_HASH_NAME)
+        .and_then(Key::into_package_addr)
+        .map(PackageHash::new)
         .unwrap_or_revert();
 
     runtime::call_versioned_contract::<()>(
-        contract_hash,
+        package_hash.into(),
         None,
         ENTRY_POINT_CONTRACT,
         RuntimeArgs::default(),
@@ -114,13 +113,13 @@ pub extern "C" fn named_keys_contract_to_contract() {
 
 #[no_mangle]
 pub extern "C" fn named_keys_session_to_session() {
-    let contract_hash = runtime::get_key(CONTRACT_PACKAGE_HASH_NAME)
-        .and_then(Key::into_hash)
-        .map(ContractPackageHash::new)
+    let package_hash = runtime::get_key(CONTRACT_PACKAGE_HASH_NAME)
+        .and_then(Key::into_package_addr)
+        .map(PackageHash::new)
         .unwrap_or_revert();
 
     runtime::call_versioned_contract::<()>(
-        contract_hash,
+        package_hash.into(),
         None,
         ENTRY_POINT_SESSION,
         RuntimeArgs::default(),
@@ -142,7 +141,8 @@ pub extern "C" fn call() {
             Parameters::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(contract_entrypoint);
         let session_entrypoint = EntryPoint::new(
@@ -150,7 +150,8 @@ pub extern "C" fn call() {
             Parameters::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Session,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(session_entrypoint);
         let contract_to_contract_entrypoint = EntryPoint::new(
@@ -158,7 +159,8 @@ pub extern "C" fn call() {
             Parameters::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(contract_to_contract_entrypoint);
         let contract_to_contract_entrypoint = EntryPoint::new(
@@ -166,7 +168,8 @@ pub extern "C" fn call() {
             Parameters::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Session,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(contract_to_contract_entrypoint);
         entry_points
@@ -188,10 +191,14 @@ pub extern "C" fn call() {
         named_keys
     };
 
-    let (contract_hash, contract_version) =
-        storage::add_contract_version(contract_package_hash, entry_points, named_keys);
+    let (contract_hash, contract_version) = storage::add_contract_version(
+        contract_package_hash,
+        entry_points,
+        named_keys,
+        BTreeMap::new(),
+    );
 
     runtime::put_key(CONTRACT_VERSION, storage::new_uref(contract_version).into());
     runtime::put_key(CONTRACT_PACKAGE_HASH_NAME, contract_package_hash.into());
-    runtime::put_key(CONTRACT_HASH_NAME, contract_hash.into());
+    runtime::put_key(CONTRACT_HASH_NAME, Key::Hash(contract_hash.value()));
 }

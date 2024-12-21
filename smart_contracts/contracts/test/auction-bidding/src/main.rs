@@ -12,8 +12,8 @@ use casper_contract::{
 };
 
 use casper_types::{
-    account::AccountHash, runtime_args, system::auction, ApiError, ContractHash, PublicKey,
-    RuntimeArgs, U512,
+    account::AccountHash, contracts::ContractHash, runtime_args, system::auction, ApiError,
+    PublicKey, U512,
 };
 
 const ARG_AMOUNT: &str = "amount";

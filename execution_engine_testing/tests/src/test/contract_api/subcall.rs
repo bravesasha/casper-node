@@ -1,11 +1,9 @@
-use casper_execution_engine::shared::storage_costs::StorageCosts;
 use num_traits::cast::AsPrimitive;
 
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, LOCAL_GENESIS_REQUEST,
 };
-use casper_types::{contracts::CONTRACT_INITIAL_VERSION, runtime_args, RuntimeArgs, U512};
+use casper_types::{runtime_args, RuntimeArgs, StorageCosts, ENTITY_INITIAL_VERSION, U512};
 
 const ARG_TARGET: &str = "target_contract";
 const ARG_GAS_AMOUNT: &str = "gas_amount";
@@ -13,7 +11,7 @@ const ARG_METHOD_NAME: &str = "method_name";
 
 #[ignore]
 #[test]
-fn should_charge_gas_for_subcall() {
+fn should_enforce_subcall_consumption() {
     const CONTRACT_NAME: &str = "measure_gas_subcall.wasm";
     const DO_NOTHING: &str = "do-nothing";
     const DO_SOMETHING: &str = "do-something";
@@ -40,9 +38,9 @@ fn should_charge_gas_for_subcall() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder.exec(do_nothing_request).expect_success().commit();
 
@@ -50,36 +48,36 @@ fn should_charge_gas_for_subcall() {
 
     builder.exec(no_subcall_request).expect_success().commit();
 
-    let do_nothing_cost = builder.exec_costs(0)[0];
+    let do_nothing_consumed = builder.exec_consumed(0);
 
-    let do_something_cost = builder.exec_costs(1)[0];
+    let do_something_consumed = builder.exec_consumed(1);
 
-    let no_subcall_cost = builder.exec_costs(2)[0];
+    let no_subcall_consumed = builder.exec_consumed(2);
 
     assert_ne!(
-        do_nothing_cost, do_something_cost,
-        "should have different costs"
+        do_nothing_consumed, do_something_consumed,
+        "should have different consumeds"
     );
 
     assert_ne!(
-        no_subcall_cost, do_something_cost,
-        "should have different costs"
+        no_subcall_consumed, do_something_consumed,
+        "should have different consumeds"
     );
 
     assert!(
-        do_nothing_cost < do_something_cost,
-        "should cost more to do something via subcall"
+        do_nothing_consumed < do_something_consumed,
+        "should consume more to do something via subcall"
     );
 
     assert!(
-        no_subcall_cost < do_nothing_cost,
-        "do nothing in a subcall should cost more than no subcall"
+        no_subcall_consumed < do_nothing_consumed,
+        "do nothing in a subcall should consume more than no subcall"
     );
 }
 
 #[ignore]
 #[test]
-fn should_add_all_gas_for_subcall() {
+fn should_add_all_gas_consumed_for_subcall() {
     const CONTRACT_NAME: &str = "add_gas_subcall.wasm";
     const ADD_GAS_FROM_SESSION: &str = "add-gas-from-session";
     const ADD_GAS_VIA_SUBCALL: &str = "add-gas-via-subcall";
@@ -128,9 +126,9 @@ fn should_add_all_gas_for_subcall() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(add_zero_gas_from_session_request)
@@ -149,23 +147,23 @@ fn should_add_all_gas_for_subcall() {
         .expect_success()
         .commit();
 
-    let add_zero_gas_from_session_cost = builder.exec_costs(0)[0];
-    let add_some_gas_from_session_cost = builder.exec_costs(1)[0];
-    let add_zero_gas_via_subcall_cost = builder.exec_costs(2)[0];
-    let add_some_gas_via_subcall_cost = builder.exec_costs(3)[0];
+    let add_zero_gas_from_session_consumed = builder.exec_consumed(0);
+    let add_some_gas_from_session_consumed = builder.exec_consumed(1);
+    let add_zero_gas_via_subcall_consumed = builder.exec_consumed(2);
+    let add_some_gas_via_subcall_consumed = builder.exec_consumed(3);
 
     let expected_gas = U512::from(StorageCosts::default().gas_per_byte()) * gas_to_add;
     assert!(
-        add_zero_gas_from_session_cost.value() < add_zero_gas_via_subcall_cost.value(),
-        "subcall expected to cost more gas due to storing contract"
+        add_zero_gas_from_session_consumed.value() < add_zero_gas_via_subcall_consumed.value(),
+        "subcall expected to consume more gas due to storing contract"
     );
-    assert!(add_some_gas_from_session_cost.value() > expected_gas);
-    assert!(add_some_gas_via_subcall_cost.value() > expected_gas);
+    assert!(add_some_gas_from_session_consumed.value() > expected_gas);
+    assert!(add_some_gas_via_subcall_consumed.value() > expected_gas);
 }
 
 #[ignore]
 #[test]
-fn expensive_subcall_should_cost_more() {
+fn expensive_subcall_should_consume_more() {
     const DO_NOTHING: &str = "do_nothing_stored.wasm";
     const EXPENSIVE_CALCULATION: &str = "expensive_calculation.wasm";
     const DO_NOTHING_PACKAGE_HASH_KEY_NAME: &str = "do_nothing_package_hash";
@@ -183,10 +181,10 @@ fn expensive_subcall_should_cost_more() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
     // store the contracts first
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(store_do_nothing_request)
@@ -199,14 +197,14 @@ fn expensive_subcall_should_cost_more() {
         .commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should get account");
 
     let expensive_calculation_contract_hash = account
         .named_keys()
         .get(EXPENSIVE_CALCULATION_KEY)
         .expect("should get expensive_calculation contract hash")
-        .into_hash()
+        .into_entity_hash()
         .expect("should get hash");
 
     // execute the contracts via subcalls
@@ -214,7 +212,7 @@ fn expensive_subcall_should_cost_more() {
     let call_do_nothing_request = ExecuteRequestBuilder::versioned_contract_call_by_name(
         *DEFAULT_ACCOUNT_ADDR,
         DO_NOTHING_PACKAGE_HASH_KEY_NAME,
-        Some(CONTRACT_INITIAL_VERSION),
+        Some(ENTITY_INITIAL_VERSION),
         ENTRY_FUNCTION_NAME,
         RuntimeArgs::new(),
     )
@@ -222,7 +220,7 @@ fn expensive_subcall_should_cost_more() {
 
     let call_expensive_calculation_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        expensive_calculation_contract_hash.into(),
+        expensive_calculation_contract_hash,
         "calculate",
         RuntimeArgs::default(),
     )
@@ -238,12 +236,12 @@ fn expensive_subcall_should_cost_more() {
         .expect_success()
         .commit();
 
-    let do_nothing_cost = builder.exec_costs(2)[0];
+    let do_nothing_consumed = builder.exec_consumed(2);
 
-    let expensive_calculation_cost = builder.exec_costs(3)[0];
+    let expensive_calculation_consumed = builder.exec_consumed(3);
 
     assert!(
-        do_nothing_cost < expensive_calculation_cost,
-        "calculation cost should be higher than doing nothing cost"
+        do_nothing_consumed < expensive_calculation_consumed,
+        "calculation consumed should be higher than doing nothing consumed"
     );
 }

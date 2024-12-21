@@ -13,7 +13,9 @@ use core::{
     iter,
     marker::Copy,
 };
-#[cfg(any(feature = "std", test))]
+#[cfg(any(feature = "testing", test))]
+use rand::distributions::{Distribution, Standard};
+#[cfg(any(feature = "std-fs-io", test))]
 use std::path::Path;
 
 #[cfg(feature = "datasize")]
@@ -28,14 +30,14 @@ use ed25519_dalek::{
 use hex_fmt::HexFmt;
 use k256::ecdsa::{
     signature::{Signer, Verifier},
-    Signature as Secp256k1Signature, SigningKey as Secp256k1SecretKey,
+    RecoveryId, Signature as Secp256k1Signature, SigningKey as Secp256k1SecretKey, VerifyingKey,
     VerifyingKey as Secp256k1PublicKey,
 };
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "json-schema")]
 use once_cell::sync::Lazy;
 #[cfg(any(feature = "std", test))]
 use pem::Pem;
-#[cfg(any(all(feature = "std", feature = "testing"), test))]
+#[cfg(any(feature = "testing", test))]
 use rand::{Rng, RngCore};
 #[cfg(feature = "json-schema")]
 use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
@@ -45,11 +47,11 @@ use serde_json::json;
 #[cfg(any(feature = "std", test))]
 use untrusted::Input;
 
-#[cfg(any(feature = "std", test))]
+#[cfg(any(feature = "std", feature = "testing", test))]
 use crate::crypto::ErrorExt;
 #[cfg(any(feature = "std-fs-io", test))]
 use crate::file_utils::{read_file, write_file, write_private_file};
-#[cfg(any(all(feature = "std", feature = "testing"), test))]
+#[cfg(any(feature = "testing", test))]
 use crate::testing::TestRng;
 use crate::{
     account::AccountHash,
@@ -106,13 +108,13 @@ const SECP256K1_PEM_SECRET_KEY_TAG: &str = "EC PRIVATE KEY";
 #[cfg(any(feature = "std", test))]
 const SECP256K1_PEM_PUBLIC_KEY_TAG: &str = "PUBLIC KEY";
 
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "json-schema")]
 static ED25519_SECRET_KEY: Lazy<SecretKey> = Lazy::new(|| {
     let bytes = [15u8; SecretKey::ED25519_LENGTH];
     SecretKey::ed25519_from_bytes(bytes).unwrap()
 });
 
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "json-schema")]
 static ED25519_PUBLIC_KEY: Lazy<PublicKey> = Lazy::new(|| {
     let bytes = [15u8; SecretKey::ED25519_LENGTH];
     let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
@@ -215,23 +217,13 @@ impl SecretKey {
 
     /// Constructs a new secp256k1 variant from a byte slice.
     pub fn secp256k1_from_bytes<T: AsRef<[u8]>>(bytes: T) -> Result<Self, Error> {
-        Ok(SecretKey::Secp256k1(
-            Secp256k1SecretKey::from_slice(bytes.as_ref()).map_err(|_| Error::SignatureError)?,
-        ))
+        Ok(SecretKey::Secp256k1(Secp256k1SecretKey::from_slice(
+            bytes.as_ref(),
+        )?))
     }
 
-    fn variant_name(&self) -> &str {
-        match self {
-            SecretKey::System => SYSTEM,
-            SecretKey::Ed25519(_) => ED25519,
-            SecretKey::Secp256k1(_) => SECP256K1,
-        }
-    }
-}
-
-#[cfg(any(feature = "std", test))]
-impl SecretKey {
     /// Generates a new ed25519 variant using the system's secure random number generator.
+    #[cfg(any(feature = "std", feature = "testing", test))]
     pub fn generate_ed25519() -> Result<Self, ErrorExt> {
         let mut bytes = [0u8; Self::ED25519_LENGTH];
         getrandom::getrandom(&mut bytes[..])?;
@@ -239,6 +231,7 @@ impl SecretKey {
     }
 
     /// Generates a new secp256k1 variant using the system's secure random number generator.
+    #[cfg(any(feature = "std", feature = "testing", test))]
     pub fn generate_secp256k1() -> Result<Self, ErrorExt> {
         let mut bytes = [0u8; Self::SECP256K1_LENGTH];
         getrandom::getrandom(&mut bytes[..])?;
@@ -259,6 +252,7 @@ impl SecretKey {
     }
 
     /// DER encodes a key.
+    #[cfg(any(feature = "std", test))]
     pub fn to_der(&self) -> Result<Vec<u8>, ErrorExt> {
         match self {
             SecretKey::System => Err(Error::System(String::from("to_der")).into()),
@@ -296,6 +290,7 @@ impl SecretKey {
     }
 
     /// Decodes a key from a DER-encoded slice.
+    #[cfg(any(feature = "std", test))]
     pub fn from_der<T: AsRef<[u8]>>(input: T) -> Result<Self, ErrorExt> {
         let input = Input::from(input.as_ref());
 
@@ -373,6 +368,7 @@ impl SecretKey {
     }
 
     /// PEM encodes a key.
+    #[cfg(any(feature = "std", test))]
     pub fn to_pem(&self) -> Result<String, ErrorExt> {
         let tag = match self {
             SecretKey::System => return Err(Error::System(String::from("to_pem")).into()),
@@ -385,6 +381,7 @@ impl SecretKey {
     }
 
     /// Decodes a key from a PEM-encoded slice.
+    #[cfg(any(feature = "std", test))]
     pub fn from_pem<T: AsRef<[u8]>>(input: T) -> Result<Self, ErrorExt> {
         let pem = pem::parse(input)?;
 
@@ -414,7 +411,7 @@ impl SecretKey {
         Ok(secret_key)
     }
 
-    /// Generates a random instance using a `TestRng`.
+    /// Returns a random `SecretKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random(rng: &mut TestRng) -> Self {
         if rng.gen() {
@@ -424,7 +421,7 @@ impl SecretKey {
         }
     }
 
-    /// Generates a random ed25519 instance using a `TestRng`.
+    /// Returns a random Ed25519 variant of `SecretKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random_ed25519(rng: &mut TestRng) -> Self {
         let mut bytes = [0u8; Self::ED25519_LENGTH];
@@ -432,7 +429,7 @@ impl SecretKey {
         SecretKey::ed25519_from_bytes(bytes).unwrap()
     }
 
-    /// Generates a random secp256k1 instance using a `TestRng`.
+    /// Returns a random secp256k1 variant of `SecretKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random_secp256k1(rng: &mut TestRng) -> Self {
         let mut bytes = [0u8; Self::SECP256K1_LENGTH];
@@ -440,9 +437,19 @@ impl SecretKey {
         SecretKey::secp256k1_from_bytes(bytes).unwrap()
     }
 
-    /// Returns an example value for documentation purposes.
-    pub fn doc_example() -> &'static Self {
+    // This method is not intended to be used by third party crates.
+    #[doc(hidden)]
+    #[cfg(feature = "json-schema")]
+    pub fn example() -> &'static Self {
         &ED25519_SECRET_KEY
+    }
+
+    fn variant_name(&self) -> &str {
+        match self {
+            SecretKey::System => SYSTEM,
+            SecretKey::Ed25519(_) => ED25519,
+            SecretKey::Secp256k1(_) => SECP256K1,
+        }
     }
 }
 
@@ -498,34 +505,14 @@ impl PublicKey {
         AccountHash::from(self)
     }
 
+    /// Hexadecimal representation of the key.
+    pub fn to_hex_string(&self) -> String {
+        self.to_hex()
+    }
+
     /// Returns `true` if this public key is of the `System` variant.
     pub fn is_system(&self) -> bool {
         matches!(self, PublicKey::System)
-    }
-
-    fn variant_name(&self) -> &str {
-        match self {
-            PublicKey::System => SYSTEM,
-            PublicKey::Ed25519(_) => ED25519,
-            PublicKey::Secp256k1(_) => SECP256K1,
-        }
-    }
-}
-
-#[cfg(any(feature = "std", test))]
-impl PublicKey {
-    /// Generates a new ed25519 variant using the system's secure random number generator.
-    pub fn generate_ed25519() -> Result<Self, ErrorExt> {
-        let mut bytes = [0u8; Self::ED25519_LENGTH];
-        getrandom::getrandom(&mut bytes[..]).expect("RNG failure!");
-        PublicKey::ed25519_from_bytes(bytes).map_err(Into::into)
-    }
-
-    /// Generates a new secp256k1 variant using the system's secure random number generator.
-    pub fn generate_secp256k1() -> Result<Self, ErrorExt> {
-        let mut bytes = [0u8; Self::SECP256K1_LENGTH];
-        getrandom::getrandom(&mut bytes[..]).expect("RNG failure!");
-        PublicKey::secp256k1_from_bytes(bytes).map_err(Into::into)
     }
 
     /// Attempts to write the key bytes to the configured file path.
@@ -542,6 +529,7 @@ impl PublicKey {
     }
 
     /// DER encodes a key.
+    #[cfg(any(feature = "std", test))]
     pub fn to_der(&self) -> Result<Vec<u8>, ErrorExt> {
         match self {
             PublicKey::System => Err(Error::System(String::from("to_der")).into()),
@@ -572,6 +560,7 @@ impl PublicKey {
     }
 
     /// Decodes a key from a DER-encoded slice.
+    #[cfg(any(feature = "std", test))]
     pub fn from_der<T: AsRef<[u8]>>(input: T) -> Result<Self, ErrorExt> {
         let input = Input::from(input.as_ref());
 
@@ -611,6 +600,7 @@ impl PublicKey {
     }
 
     /// PEM encodes a key.
+    #[cfg(any(feature = "std", test))]
     pub fn to_pem(&self) -> Result<String, ErrorExt> {
         let tag = match self {
             PublicKey::System => return Err(Error::System(String::from("to_pem")).into()),
@@ -623,6 +613,7 @@ impl PublicKey {
     }
 
     /// Decodes a key from a PEM-encoded slice.
+    #[cfg(any(feature = "std", test))]
     pub fn from_pem<T: AsRef<[u8]>>(input: T) -> Result<Self, ErrorExt> {
         let pem = pem::parse(input)?;
         let public_key = Self::from_der(&pem.contents)?;
@@ -648,30 +639,40 @@ impl PublicKey {
         Ok(public_key)
     }
 
-    /// Generates a random instance using a `TestRng`.
+    /// Returns a random `PublicKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random(rng: &mut TestRng) -> Self {
         let secret_key = SecretKey::random(rng);
         PublicKey::from(&secret_key)
     }
 
-    /// Generates a random ed25519 instance using a `TestRng`.
+    /// Returns a random Ed25519 variant of `PublicKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random_ed25519(rng: &mut TestRng) -> Self {
         let secret_key = SecretKey::random_ed25519(rng);
         PublicKey::from(&secret_key)
     }
 
-    /// Generates a random secp256k1 instance using a `TestRng`.
+    /// Returns a random secp256k1 variant of `PublicKey`.
     #[cfg(any(feature = "testing", test))]
     pub fn random_secp256k1(rng: &mut TestRng) -> Self {
         let secret_key = SecretKey::random_secp256k1(rng);
         PublicKey::from(&secret_key)
     }
 
-    /// Returns an example value for documentation purposes.
-    pub fn doc_example() -> &'static Self {
+    // This method is not intended to be used by third party crates.
+    #[doc(hidden)]
+    #[cfg(feature = "json-schema")]
+    pub fn example() -> &'static Self {
         &ED25519_PUBLIC_KEY
+    }
+
+    fn variant_name(&self) -> &str {
+        match self {
+            PublicKey::System => SYSTEM,
+            PublicKey::Ed25519(_) => ED25519,
+            PublicKey::Secp256k1(_) => SECP256K1,
+        }
     }
 }
 
@@ -701,6 +702,50 @@ impl From<&SecretKey> for PublicKey {
             SecretKey::Ed25519(secret_key) => PublicKey::Ed25519(secret_key.into()),
             SecretKey::Secp256k1(secret_key) => PublicKey::Secp256k1(secret_key.into()),
         }
+    }
+}
+
+#[cfg(any(feature = "testing", test))]
+impl Distribution<PublicKey> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PublicKey {
+        let secret_key = if rng.gen() {
+            SecretKey::generate_ed25519().unwrap()
+        } else {
+            SecretKey::generate_secp256k1().unwrap()
+        };
+        PublicKey::from(&secret_key)
+    }
+}
+
+#[cfg(any(feature = "testing", test))]
+impl PartialEq for SecretKey {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::System, Self::System) => true,
+            (Self::Ed25519(k1), Self::Ed25519(k2)) => k1.to_bytes() == k2.to_bytes(),
+            (Self::Secp256k1(k1), Self::Secp256k1(k2)) => k1.to_bytes() == k2.to_bytes(),
+            _ => false,
+        }
+    }
+}
+#[cfg(any(feature = "testing", test))]
+impl Eq for SecretKey {}
+
+#[cfg(any(feature = "testing", test))]
+impl Ord for SecretKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::System, Self::System) => Ordering::Equal,
+            (Self::Ed25519(k1), Self::Ed25519(k2)) => k1.to_bytes().cmp(&k2.to_bytes()),
+            (Self::Secp256k1(k1), Self::Secp256k1(k2)) => k1.to_bytes().cmp(&k2.to_bytes()),
+            (k1, k2) => k1.variant_name().cmp(k2.variant_name()),
+        }
+    }
+}
+#[cfg(any(feature = "testing", test))]
+impl PartialOrd for SecretKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -941,6 +986,11 @@ impl Signature {
             Signature::Secp256k1(_) => SECP256K1,
         }
     }
+
+    /// Hexadecimal representation of the signature.
+    pub fn to_hex_string(&self) -> String {
+        self.to_hex()
+    }
 }
 
 impl AsymmetricType<'_> for Signature {
@@ -1159,6 +1209,29 @@ pub fn sign<T: AsRef<[u8]>>(
         }
         _ => panic!("secret and public key types must match"),
     }
+}
+
+/// Attempts to recover a Secp256k1 [`PublicKey`] from a message and a signature over it.
+pub fn recover_secp256k1<T: AsRef<[u8]>>(
+    message: T,
+    signature: &Signature,
+    recovery_id: u8,
+) -> Result<PublicKey, Error> {
+    let Signature::Secp256k1(signature) = signature else {
+        return Err(Error::AsymmetricKey(String::from(
+            "public keys can only be recovered from Secp256k1 signatures",
+        )));
+    };
+
+    let Ok(key) = VerifyingKey::recover_from_msg(
+        message.as_ref(),
+        signature,
+        RecoveryId::try_from(recovery_id)?,
+    ) else {
+        return Err(Error::AsymmetricKey(String::from("Key extraction failed")));
+    };
+
+    Ok(PublicKey::Secp256k1(key))
 }
 
 /// Verifies the signature of the given message against the given public key.

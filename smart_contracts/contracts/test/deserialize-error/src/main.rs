@@ -3,12 +3,12 @@
 
 extern crate alloc;
 
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 
 use casper_contract::{self, contract_api::storage, unwrap_or_revert::UnwrapOrRevert};
 use casper_types::{
-    api_error, bytesrepr::ToBytes, contracts::Parameters, CLType, ContractHash, EntryPoint,
-    EntryPointAccess, EntryPointType, EntryPoints,
+    addressable_entity::Parameters, api_error, bytesrepr::ToBytes, contracts::ContractHash, CLType,
+    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints,
 };
 
 #[no_mangle]
@@ -46,7 +46,7 @@ pub fn my_call_contract(contract_hash: ContractHash, entry_point_name: &str) -> 
     let (contract_hash_ptr, contract_hash_size, _bytes1) = to_ptr(contract_hash);
 
     let entry_point_name = ToBytes::to_bytes(entry_point_name).unwrap();
-    let malicious_args = vec![255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let malicious_args = [255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
     {
         let mut bytes_written = 0usize;
@@ -76,14 +76,16 @@ pub extern "C" fn call() {
             Parameters::default(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
 
         entry_points.add_entry_point(entry_point);
 
         entry_points
     };
-    let (contract_hash, _contract_version) = storage::new_contract(entry_points, None, None, None);
+    let (contract_hash, _contract_version) =
+        storage::new_contract(entry_points, None, None, None, None);
 
     my_call_contract(contract_hash, "do_nothing");
 }

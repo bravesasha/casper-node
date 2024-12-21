@@ -4,22 +4,179 @@ use alloc::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     vec::Vec,
 };
-
-use core::convert::TryInto;
-#[cfg(feature = "datasize")]
-use datasize::DataSize;
-
-use serde::{Deserialize, Serialize};
-
-use crate::{
-    account::{AccountHash, AddKeyFailure, RemoveKeyFailure, UpdateKeyFailure, Weight},
-    bytesrepr::{self, Error, FromBytes, ToBytes},
+use core::{
+    fmt,
+    fmt::{Display, Formatter},
 };
 
-/// A mapping that represents the association of a [`Weight`] with an [`AccountHash`].
+#[cfg(feature = "datasize")]
+use datasize::DataSize;
+#[cfg(feature = "json-schema")]
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "json-schema")]
+use serde_map_to_array::KeyValueJsonSchema;
+use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
+
+use crate::{
+    account::{AccountHash, TryFromIntError, Weight},
+    bytesrepr::{self, FromBytes, ToBytes},
+};
+
+/// Errors that can occur while adding a new [`AccountHash`] to an account's associated keys map.
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[repr(i32)]
+#[non_exhaustive]
+pub enum AddKeyFailure {
+    /// There are already maximum [`AccountHash`]s associated with the given account.
+    MaxKeysLimit = 1,
+    /// The given [`AccountHash`] is already associated with the given account.
+    DuplicateKey = 2,
+    /// Caller doesn't have sufficient permissions to associate a new [`AccountHash`] with the
+    /// given account.
+    PermissionDenied = 3,
+}
+
+impl Display for AddKeyFailure {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        match self {
+            AddKeyFailure::MaxKeysLimit => formatter.write_str(
+                "Unable to add new associated key because maximum amount of keys is reached",
+            ),
+            AddKeyFailure::DuplicateKey => formatter
+                .write_str("Unable to add new associated key because given key already exists"),
+            AddKeyFailure::PermissionDenied => formatter
+                .write_str("Unable to add new associated key due to insufficient permissions"),
+        }
+    }
+}
+
+// This conversion is not intended to be used by third party crates.
+#[doc(hidden)]
+impl TryFrom<i32> for AddKeyFailure {
+    type Error = TryFromIntError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            d if d == AddKeyFailure::MaxKeysLimit as i32 => Ok(AddKeyFailure::MaxKeysLimit),
+            d if d == AddKeyFailure::DuplicateKey as i32 => Ok(AddKeyFailure::DuplicateKey),
+            d if d == AddKeyFailure::PermissionDenied as i32 => Ok(AddKeyFailure::PermissionDenied),
+            _ => Err(TryFromIntError(())),
+        }
+    }
+}
+
+/// Errors that can occur while removing a [`AccountHash`] from an account's associated keys map.
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[repr(i32)]
+#[non_exhaustive]
+pub enum RemoveKeyFailure {
+    /// The given [`AccountHash`] is not associated with the given account.
+    MissingKey = 1,
+    /// Caller doesn't have sufficient permissions to remove an associated [`AccountHash`] from the
+    /// given account.
+    PermissionDenied = 2,
+    /// Removing the given associated [`AccountHash`] would cause the total weight of all remaining
+    /// `AccountHash`s to fall below one of the action thresholds for the given account.
+    ThresholdViolation = 3,
+}
+
+impl Display for RemoveKeyFailure {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        match self {
+            RemoveKeyFailure::MissingKey => {
+                formatter.write_str("Unable to remove a key that does not exist")
+            }
+            RemoveKeyFailure::PermissionDenied => formatter
+                .write_str("Unable to remove associated key due to insufficient permissions"),
+            RemoveKeyFailure::ThresholdViolation => formatter.write_str(
+                "Unable to remove a key which would violate action threshold constraints",
+            ),
+        }
+    }
+}
+
+// This conversion is not intended to be used by third party crates.
+#[doc(hidden)]
+impl TryFrom<i32> for RemoveKeyFailure {
+    type Error = TryFromIntError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            d if d == RemoveKeyFailure::MissingKey as i32 => Ok(RemoveKeyFailure::MissingKey),
+            d if d == RemoveKeyFailure::PermissionDenied as i32 => {
+                Ok(RemoveKeyFailure::PermissionDenied)
+            }
+            d if d == RemoveKeyFailure::ThresholdViolation as i32 => {
+                Ok(RemoveKeyFailure::ThresholdViolation)
+            }
+            _ => Err(TryFromIntError(())),
+        }
+    }
+}
+
+/// Errors that can occur while updating the [`crate::addressable_entity::Weight`] of a
+/// [`AccountHash`] in an account's associated keys map.
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[repr(i32)]
+#[non_exhaustive]
+pub enum UpdateKeyFailure {
+    /// The given [`AccountHash`] is not associated with the given account.
+    MissingKey = 1,
+    /// Caller doesn't have sufficient permissions to update an associated [`AccountHash`] from the
+    /// given account.
+    PermissionDenied = 2,
+    /// Updating the [`crate::addressable_entity::Weight`] of the given associated [`AccountHash`]
+    /// would cause the total weight of all `AccountHash`s to fall below one of the action
+    /// thresholds for the given account.
+    ThresholdViolation = 3,
+}
+
+impl Display for UpdateKeyFailure {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        match self {
+            UpdateKeyFailure::MissingKey => formatter.write_str(
+                "Unable to update the value under an associated key that does not exist",
+            ),
+            UpdateKeyFailure::PermissionDenied => formatter
+                .write_str("Unable to update associated key due to insufficient permissions"),
+            UpdateKeyFailure::ThresholdViolation => formatter.write_str(
+                "Unable to update weight that would fall below any of action thresholds",
+            ),
+        }
+    }
+}
+
+// This conversion is not intended to be used by third party crates.
+#[doc(hidden)]
+impl TryFrom<i32> for UpdateKeyFailure {
+    type Error = TryFromIntError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            d if d == UpdateKeyFailure::MissingKey as i32 => Ok(UpdateKeyFailure::MissingKey),
+            d if d == UpdateKeyFailure::PermissionDenied as i32 => {
+                Ok(UpdateKeyFailure::PermissionDenied)
+            }
+            d if d == UpdateKeyFailure::ThresholdViolation as i32 => {
+                Ok(UpdateKeyFailure::ThresholdViolation)
+            }
+            _ => Err(TryFromIntError(())),
+        }
+    }
+}
+
+/// A collection of weighted public keys (represented as account hashes) associated with an account.
 #[derive(Default, PartialOrd, Ord, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-pub struct AssociatedKeys(BTreeMap<AccountHash, Weight>);
+#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
+#[cfg_attr(feature = "json-schema", schemars(rename = "AccountAssociatedKeys"))]
+#[serde(deny_unknown_fields)]
+#[rustfmt::skip]
+pub struct AssociatedKeys(
+    #[serde(with = "BTreeMapToArray::<AccountHash, Weight, Labels>")]
+    BTreeMap<AccountHash, Weight>,
+);
 
 impl AssociatedKeys {
     /// Constructs a new AssociatedKeys.
@@ -29,7 +186,8 @@ impl AssociatedKeys {
         AssociatedKeys(bt)
     }
 
-    /// Adds new AssociatedKey to the set.
+    /// Adds a new AssociatedKey to the set.
+    ///
     /// Returns true if added successfully, false otherwise.
     pub fn add_key(&mut self, key: AccountHash, weight: Weight) -> Result<(), AddKeyFailure> {
         match self.0.entry(key) {
@@ -134,7 +292,7 @@ impl From<AssociatedKeys> for BTreeMap<AccountHash, Weight> {
 }
 
 impl ToBytes for AssociatedKeys {
-    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         self.0.to_bytes()
     }
 
@@ -143,25 +301,32 @@ impl ToBytes for AssociatedKeys {
     }
 
     fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        let length_32: u32 = self
-            .0
-            .len()
-            .try_into()
-            .map_err(|_| Error::NotRepresentable)?;
-        writer.extend_from_slice(&length_32.to_le_bytes());
-        for (key, weight) in self.0.iter() {
-            key.write_bytes(writer)?;
-            weight.write_bytes(writer)?;
-        }
-        Ok(())
+        self.0.write_bytes(writer)
     }
 }
 
 impl FromBytes for AssociatedKeys {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (associated_keys, rem) = FromBytes::from_bytes(bytes)?;
         Ok((AssociatedKeys(associated_keys), rem))
     }
+}
+
+struct Labels;
+
+impl KeyValueLabels for Labels {
+    const KEY: &'static str = "account_hash";
+    const VALUE: &'static str = "weight";
+}
+
+#[cfg(feature = "json-schema")]
+impl KeyValueJsonSchema for Labels {
+    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("AssociatedKey");
+    const JSON_SCHEMA_KV_DESCRIPTION: Option<&'static str> = Some("A weighted public key.");
+    const JSON_SCHEMA_KEY_DESCRIPTION: Option<&'static str> =
+        Some("The account hash of the public key.");
+    const JSON_SCHEMA_VALUE_DESCRIPTION: Option<&'static str> =
+        Some("The weight assigned to the public key.");
 }
 
 #[doc(hidden)]
@@ -169,18 +334,20 @@ impl FromBytes for AssociatedKeys {
 pub mod gens {
     use proptest::prelude::*;
 
-    use crate::gens::{account_hash_arb, weight_arb};
+    use crate::gens::{account_hash_arb, account_weight_arb};
 
     use super::AssociatedKeys;
 
-    pub fn associated_keys_arb() -> impl Strategy<Value = AssociatedKeys> {
-        proptest::collection::btree_map(account_hash_arb(), weight_arb(), 10).prop_map(|keys| {
-            let mut associated_keys = AssociatedKeys::default();
-            keys.into_iter().for_each(|(k, v)| {
-                associated_keys.add_key(k, v).unwrap();
-            });
-            associated_keys
-        })
+    pub fn account_associated_keys_arb() -> impl Strategy<Value = AssociatedKeys> {
+        proptest::collection::btree_map(account_hash_arb(), account_weight_arb(), 10).prop_map(
+            |keys| {
+                let mut associated_keys = AssociatedKeys::default();
+                keys.into_iter().for_each(|(k, v)| {
+                    associated_keys.add_key(k, v).unwrap();
+                });
+                associated_keys
+            },
+        )
     }
 }
 
@@ -189,7 +356,7 @@ mod tests {
     use std::{collections::BTreeSet, iter::FromIterator};
 
     use crate::{
-        account::{AccountHash, AddKeyFailure, Weight, ACCOUNT_HASH_LENGTH},
+        account::{AccountHash, Weight, ACCOUNT_HASH_LENGTH},
         bytesrepr,
     };
 
@@ -324,7 +491,7 @@ mod tests {
         let weight_2 = Weight::new(2);
         let weight_3 = Weight::new(3);
 
-        let saturated_weight = Weight::new(u8::max_value());
+        let saturated_weight = Weight::new(u8::MAX);
 
         let associated_keys = {
             let mut res = AssociatedKeys::new(identity_key, identity_key_weight);

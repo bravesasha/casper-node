@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate alloc;
 
-use alloc::string::ToString;
+use alloc::{collections::BTreeMap, string::ToString};
 
 use casper_contract::{
     contract_api::{runtime, storage, system},
@@ -12,10 +12,10 @@ use casper_contract::{
 };
 use casper_types::{
     bytesrepr::FromBytes,
-    contracts::NamedKeys,
+    contracts::{ContractPackageHash, NamedKeys},
     runtime_args,
     system::auction::{self, DelegationRate},
-    CLType, CLTyped, CLValue, ContractPackageHash, EntryPoint, EntryPointAccess, EntryPointType,
+    CLType, CLTyped, CLValue, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType,
     EntryPoints, Key, Parameter, PublicKey, RuntimeArgs, U512,
 };
 
@@ -85,10 +85,10 @@ fn forwarded_undelegate_args() -> RuntimeArgs {
 }
 
 fn forwarded_activate_bid_args() -> RuntimeArgs {
-    let validator_public_key: PublicKey = runtime::get_named_arg(auction::ARG_VALIDATOR_PUBLIC_KEY);
+    let validator_public_key: PublicKey = runtime::get_named_arg(auction::ARG_VALIDATOR);
 
     runtime_args! {
-        auction::ARG_VALIDATOR_PUBLIC_KEY => validator_public_key,
+        auction::ARG_VALIDATOR => validator_public_key,
     }
 }
 
@@ -109,7 +109,7 @@ pub extern "C" fn withdraw_proxy_call_1() {
 
 fn forward_call_to_this<T: CLTyped + FromBytes>(entry_point: &str, runtime_args: RuntimeArgs) -> T {
     let this = runtime::get_key(PACKAGE_HASH_NAME)
-        .and_then(Key::into_hash)
+        .and_then(Key::into_package_addr)
         .map(ContractPackageHash::new)
         .unwrap_or_revert();
     runtime::call_versioned_contract(this, None, entry_point, runtime_args)
@@ -182,7 +182,8 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(add_bid_proxy_call_1);
 
@@ -195,7 +196,8 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(add_bid_proxy_call);
 
@@ -207,7 +209,8 @@ pub extern "C" fn call() {
         ],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let withdraw_proxy_call = EntryPoint::new(
@@ -218,7 +221,8 @@ pub extern "C" fn call() {
         ],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let delegate_proxy_call = EntryPoint::new(
@@ -230,7 +234,8 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let delegate_proxy_call_1 = EntryPoint::new(
@@ -242,7 +247,8 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let undelegate_proxy_call = EntryPoint::new(
@@ -254,7 +260,8 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let undelegate_proxy_call_1 = EntryPoint::new(
@@ -266,28 +273,25 @@ pub extern "C" fn call() {
         ],
         U512::cl_type(),
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     let activate_bid_proxy_call = EntryPoint::new(
         METHOD_ACTIVATE_BID_CALL,
-        vec![Parameter::new(
-            auction::ARG_VALIDATOR_PUBLIC_KEY,
-            CLType::PublicKey,
-        )],
+        vec![Parameter::new(auction::ARG_VALIDATOR, CLType::PublicKey)],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
     let activate_bid_proxy_call_1 = EntryPoint::new(
         METHOD_ACTIVATE_BID_CALL_1,
-        vec![Parameter::new(
-            auction::ARG_VALIDATOR_PUBLIC_KEY,
-            CLType::PublicKey,
-        )],
+        vec![Parameter::new(auction::ARG_VALIDATOR, CLType::PublicKey)],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Contract,
+        EntryPointType::Called,
+        EntryPointPayment::Caller,
     );
 
     entry_points.add_entry_point(withdraw_proxy_call);
@@ -310,7 +314,11 @@ pub extern "C" fn call() {
     let mut named_keys = NamedKeys::new();
     named_keys.insert(PACKAGE_HASH_NAME.to_string(), contract_package_hash.into());
 
-    let (contract_hash, _version) =
-        storage::add_contract_version(contract_package_hash, entry_points, named_keys);
-    runtime::put_key(CONTRACT_HASH_NAME, contract_hash.into());
+    let (contract_hash, _version) = storage::add_contract_version(
+        contract_package_hash,
+        entry_points,
+        named_keys,
+        BTreeMap::new(),
+    );
+    runtime::put_key(CONTRACT_HASH_NAME, Key::Hash(contract_hash.value()));
 }

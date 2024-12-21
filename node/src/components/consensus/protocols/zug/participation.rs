@@ -42,19 +42,21 @@ impl ParticipationStatus {
                 Fault::Direct(..) => ParticipationStatus::Equivocated,
             });
         }
-        // TODO: Avoid iterating over all old rounds every time we log this.
-        for r_id in zug.rounds.keys().rev() {
-            if zug.has_echoed(*r_id, idx)
-                || zug.has_voted(*r_id, idx)
-                || (zug.has_accepted_proposal(*r_id) && zug.leader(*r_id) == idx)
-            {
-                if r_id.saturating_add(2) < zug.current_round {
-                    return Some(ParticipationStatus::LastSeenInRound(*r_id));
-                } else {
-                    return None; // Seen recently; considered currently active.
-                }
+
+        let last_seen_round = zug
+            .active
+            .get(idx)
+            .and_then(Option::as_ref)
+            .map(|signed_msg| signed_msg.round_id);
+        match last_seen_round {
+            // not seen at all
+            None => Some(ParticipationStatus::Inactive),
+            // seen, but not within last 2 rounds
+            Some(r_id) if r_id.saturating_add(2) < zug.current_round => {
+                Some(ParticipationStatus::LastSeenInRound(r_id))
             }
+            // seen recently
+            _ => None,
         }
-        Some(ParticipationStatus::Inactive)
     }
 }

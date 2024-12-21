@@ -1,13 +1,13 @@
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    DEFAULT_ACCOUNT_PUBLIC_KEY, MINIMUM_ACCOUNT_CREATION_BALANCE, PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_PUBLIC_KEY,
+    LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE,
 };
-use casper_execution_engine::core::{
+use casper_execution_engine::{
     engine_state::{engine_config::DEFAULT_MINIMUM_DELEGATION_AMOUNT, Error as CoreError},
-    execution::Error as ExecError,
+    execution::ExecError,
 };
 use casper_types::{
-    runtime_args, system::auction, ApiError, PublicKey, RuntimeArgs, SecretKey, U512,
+    runtime_args, system::auction, ApiError, PublicKey, SecretKey, DEFAULT_MINIMUM_BID_AMOUNT, U512,
 };
 use once_cell::sync::Lazy;
 
@@ -55,9 +55,9 @@ fn should_fail_to_add_bid_from_stored_session_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(store_call_auction_request)
@@ -97,9 +97,9 @@ fn should_fail_to_add_bid_from_stored_contract_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(store_call_auction_request)
@@ -125,7 +125,7 @@ fn should_fail_to_withdraw_bid_from_stored_session_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -150,9 +150,9 @@ fn should_fail_to_withdraw_bid_from_stored_session_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder.exec(add_bid_request).commit().expect_success();
 
@@ -180,7 +180,7 @@ fn should_fail_to_withdraw_bid_from_stored_contract_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -205,9 +205,9 @@ fn should_fail_to_withdraw_bid_from_stored_contract_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder.exec(add_bid_request).commit().expect_success();
 
@@ -254,7 +254,7 @@ fn should_fail_to_delegate_from_stored_session_code() {
         VALIDATOR_PUBLIC_KEY.to_account_hash(),
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => validator_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -280,9 +280,9 @@ fn should_fail_to_delegate_from_stored_session_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(validator_fund_request)
@@ -334,7 +334,7 @@ fn should_fail_to_delegate_from_stored_contract_code() {
         VALIDATOR_PUBLIC_KEY.to_account_hash(),
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => validator_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -360,9 +360,9 @@ fn should_fail_to_delegate_from_stored_contract_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder
         .exec(validator_fund_request)
@@ -414,7 +414,7 @@ fn should_fail_to_undelegate_from_stored_session_code() {
         VALIDATOR_PUBLIC_KEY.to_account_hash(),
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => validator_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -428,9 +428,9 @@ fn should_fail_to_undelegate_from_stored_session_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let delegate_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -508,7 +508,7 @@ fn should_fail_to_undelegate_from_stored_contract_code() {
         VALIDATOR_PUBLIC_KEY.to_account_hash(),
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => validator_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -522,9 +522,9 @@ fn should_fail_to_undelegate_from_stored_contract_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let delegate_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -583,7 +583,7 @@ fn should_fail_to_activate_bid_from_stored_session_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -594,7 +594,7 @@ fn should_fail_to_activate_bid_from_stored_session_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_WITHDRAW_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
         },
     )
@@ -607,9 +607,9 @@ fn should_fail_to_activate_bid_from_stored_session_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder.exec(add_bid_request).commit().expect_success();
     builder.exec(withdraw_bid_request).commit().expect_success();
@@ -625,7 +625,7 @@ fn should_fail_to_activate_bid_from_stored_session_code() {
         None,
         CONTRACT_ACTIVATE_BID_ENTRYPOINT_SESSION,
         runtime_args! {
-            auction::ARG_VALIDATOR_PUBLIC_KEY => default_public_key_arg,
+            auction::ARG_VALIDATOR => default_public_key_arg,
         },
     )
     .build();
@@ -649,7 +649,7 @@ fn should_fail_to_activate_bid_from_stored_contract_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
             auction::ARG_DELEGATION_RATE => 0u8,
         },
@@ -660,7 +660,7 @@ fn should_fail_to_activate_bid_from_stored_contract_code() {
         *DEFAULT_ACCOUNT_ADDR,
         CONTRACT_WITHDRAW_BID,
         runtime_args! {
-            auction::ARG_AMOUNT => U512::one(), // zero results in Error::BondTooSmall
+            auction::ARG_AMOUNT => U512::from(DEFAULT_MINIMUM_BID_AMOUNT), // smaller amount results in Error::BondTooSmall
             auction::ARG_PUBLIC_KEY => default_public_key_arg.clone(),
         },
     )
@@ -673,9 +673,9 @@ fn should_fail_to_activate_bid_from_stored_contract_code() {
     )
     .build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     builder.exec(add_bid_request).commit().expect_success();
     builder.exec(withdraw_bid_request).commit().expect_success();
@@ -691,7 +691,7 @@ fn should_fail_to_activate_bid_from_stored_contract_code() {
         None,
         CONTRACT_ACTIVATE_BID_ENTRYPOINT_CONTRACT,
         runtime_args! {
-            auction::ARG_VALIDATOR_PUBLIC_KEY => default_public_key_arg,
+            auction::ARG_VALIDATOR => default_public_key_arg,
         },
     )
     .build();

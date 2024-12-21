@@ -6,7 +6,7 @@ extern crate alloc;
 
 use alloc::{
     boxed::Box,
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     string::{String, ToString},
     vec::Vec,
 };
@@ -19,10 +19,11 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
+    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     api_error,
     bytesrepr::{self, ToBytes},
-    contracts::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, NamedKeys},
-    ApiError, CLType, ContractPackage, ContractPackageHash, Group, Key, Parameter, URef,
+    contracts::{ContractPackage, ContractPackageHash, NamedKeys},
+    ApiError, CLType, EntryPointPayment, Group, Key, Parameter, URef,
 };
 
 const PACKAGE_HASH_KEY: &str = "package_hash_key";
@@ -39,17 +40,18 @@ const UREF_INDICES_ARG: &str = "uref_indices";
 
 #[no_mangle]
 pub extern "C" fn create_group() {
-    let package_hash_key: ContractPackageHash = runtime::get_key(PACKAGE_HASH_KEY)
-        .and_then(Key::into_hash)
-        .unwrap_or_revert()
-        .into();
+    let package_hash_key =
+        runtime::get_key(PACKAGE_HASH_KEY).unwrap_or_revert_with(ApiError::User(15));
+    let contract_package_hash = package_hash_key
+        .into_hash_addr()
+        .unwrap_or_revert_with(ApiError::User(16));
     let group_name: String = runtime::get_named_arg(GROUP_NAME_ARG);
     let total_urefs: u64 = runtime::get_named_arg(TOTAL_NEW_UREFS_ARG);
     let total_existing_urefs: u64 = runtime::get_named_arg(TOTAL_EXISTING_UREFS_ARG);
     let existing_urefs: Vec<URef> = (0..total_existing_urefs).map(storage::new_uref).collect();
 
     storage::create_contract_user_group(
-        package_hash_key,
+        ContractPackageHash::new(contract_package_hash),
         &group_name,
         total_urefs as u8,
         BTreeSet::from_iter(existing_urefs),
@@ -59,27 +61,36 @@ pub extern "C" fn create_group() {
 
 #[no_mangle]
 pub extern "C" fn remove_group() {
-    let package_hash_key: ContractPackageHash = runtime::get_key(PACKAGE_HASH_KEY)
-        .and_then(Key::into_hash)
-        .unwrap_or_revert()
-        .into();
+    let package_hash_key =
+        runtime::get_key(PACKAGE_HASH_KEY).unwrap_or_revert_with(ApiError::User(15));
+    let contract_package_hash = package_hash_key
+        .into_hash_addr()
+        .unwrap_or_revert_with(ApiError::User(16));
     let group_name: String = runtime::get_named_arg(GROUP_NAME_ARG);
-    storage::remove_contract_user_group(package_hash_key, &group_name).unwrap_or_revert();
+    storage::remove_contract_user_group(
+        ContractPackageHash::new(contract_package_hash),
+        &group_name,
+    )
+    .unwrap_or_revert();
 }
 
 #[no_mangle]
 pub extern "C" fn extend_group_urefs() {
-    let package_hash_key: ContractPackageHash = runtime::get_key(PACKAGE_HASH_KEY)
-        .and_then(Key::into_hash)
-        .unwrap_or_revert()
-        .into();
+    let package_hash_key =
+        runtime::get_key(PACKAGE_HASH_KEY).unwrap_or_revert_with(ApiError::User(15));
+    let contract_package_hash = package_hash_key
+        .into_hash_addr()
+        .unwrap_or_revert_with(ApiError::User(16));
     let group_name: String = runtime::get_named_arg(GROUP_NAME_ARG);
     let new_urefs_count: u64 = runtime::get_named_arg(TOTAL_NEW_UREFS_ARG);
 
     // Provisions additional urefs inside group
     for _ in 1..=new_urefs_count {
-        let _new_uref = storage::provision_contract_user_group_uref(package_hash_key, &group_name)
-            .unwrap_or_revert();
+        let _new_uref = storage::provision_contract_user_group_uref(
+            ContractPackageHash::new(contract_package_hash),
+            &group_name,
+        )
+        .unwrap_or_revert();
     }
 }
 
@@ -132,10 +143,11 @@ fn read_contract_package(
 
 #[no_mangle]
 pub extern "C" fn remove_group_urefs() {
-    let package_hash: ContractPackageHash = runtime::get_key(PACKAGE_HASH_KEY)
-        .and_then(Key::into_hash)
-        .unwrap_or_revert()
-        .into();
+    let package_hash_key =
+        runtime::get_key(PACKAGE_HASH_KEY).unwrap_or_revert_with(ApiError::User(15));
+    let contract_package_hash = package_hash_key
+        .into_hash_addr()
+        .unwrap_or_revert_with(ApiError::User(16));
     let _package_access_key: URef = runtime::get_key(PACKAGE_ACCESS_KEY)
         .unwrap_or_revert()
         .try_into()
@@ -143,9 +155,10 @@ pub extern "C" fn remove_group_urefs() {
     let group_name: String = runtime::get_named_arg(GROUP_NAME_ARG);
     let ordinals: Vec<u64> = runtime::get_named_arg(UREF_INDICES_ARG);
 
-    let contract_package: ContractPackage = read_contract_package(package_hash)
-        .unwrap_or_revert()
-        .unwrap_or_revert();
+    let contract_package: ContractPackage =
+        read_contract_package(ContractPackageHash::new(contract_package_hash))
+            .unwrap_or_revert()
+            .unwrap_or_revert();
 
     let group_urefs = contract_package
         .groups()
@@ -164,8 +177,12 @@ pub extern "C" fn remove_group_urefs() {
         );
     }
 
-    storage::remove_contract_user_group_urefs(package_hash, &group_name, urefs_to_remove)
-        .unwrap_or_revert();
+    storage::remove_contract_user_group_urefs(
+        ContractPackageHash::new(contract_package_hash),
+        &group_name,
+        urefs_to_remove,
+    )
+    .unwrap_or_revert();
 }
 
 /// Restricted uref comes from creating a group and will be assigned to a smart contract
@@ -180,7 +197,8 @@ fn create_entry_points_1() -> EntryPoints {
         ],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Session,
+        EntryPointType::Caller,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(restricted_session);
 
@@ -189,7 +207,8 @@ fn create_entry_points_1() -> EntryPoints {
         vec![Parameter::new(GROUP_NAME_ARG, CLType::String)],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Session,
+        EntryPointType::Caller,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(remove_group);
 
@@ -202,7 +221,8 @@ fn create_entry_points_1() -> EntryPoints {
         ],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Session,
+        EntryPointType::Caller,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(extend_group_urefs);
 
@@ -215,7 +235,8 @@ fn create_entry_points_1() -> EntryPoints {
         ],
         CLType::Unit,
         EntryPointAccess::Public,
-        EntryPointType::Session,
+        EntryPointType::Caller,
+        EntryPointPayment::Caller,
     );
     entry_points.add_entry_point(remove_group_urefs);
     entry_points
@@ -225,7 +246,12 @@ fn install_version_1(package_hash: ContractPackageHash) {
     let contract_named_keys = NamedKeys::new();
 
     let entry_points = create_entry_points_1();
-    storage::add_contract_version(package_hash, entry_points, contract_named_keys);
+    storage::add_contract_version(
+        package_hash,
+        entry_points,
+        contract_named_keys,
+        BTreeMap::new(),
+    );
 }
 
 #[no_mangle]

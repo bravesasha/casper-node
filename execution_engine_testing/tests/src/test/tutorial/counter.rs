@@ -1,6 +1,5 @@
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, LOCAL_GENESIS_REQUEST,
 };
 use casper_types::{Key, RuntimeArgs, StoredValue};
 
@@ -12,8 +11,8 @@ const COUNTER_KEY: &str = "counter";
 #[ignore]
 #[test]
 fn should_run_counter_example() {
-    let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let install_request_1 = ExecuteRequestBuilder::standard(
         *DEFAULT_ACCOUNT_ADDR,
@@ -39,10 +38,17 @@ fn should_run_counter_example() {
 
     builder.exec(install_request_1).expect_success().commit();
 
+    let binding = builder
+        .query(None, Key::Account(*DEFAULT_ACCOUNT_ADDR), &[])
+        .expect("must have value");
+    let result = binding.as_account().unwrap().named_keys();
+
+    println!("Named keys, {:?}", result);
+
     let query_result = builder
         .query(
             None,
-            Key::from(*DEFAULT_ACCOUNT_ADDR),
+            Key::Account(*DEFAULT_ACCOUNT_ADDR),
             &[COUNTER_KEY.into(), COUNT_KEY.into()],
         )
         .expect("should query");
@@ -74,3 +80,21 @@ fn should_run_counter_example() {
 
     builder.exec(call_request_1).expect_success().commit();
 }
+
+// #[test]
+// fn gen_fixture() {
+//     lmdb_fixture::generate_fixture(
+//         "counter_contract",
+//         LOCAL_GENESIS_REQUEST.clone(),
+//         |builder| {
+//             let install_request_1 = ExecuteRequestBuilder::standard(
+//                 *DEFAULT_ACCOUNT_ADDR,
+//                 COUNTER_INSTALLER_WASM,
+//                 RuntimeArgs::default(),
+//             )
+//             .build();
+//             builder.exec(install_request_1).expect_success().commit();
+//         },
+//     )
+//     .expect("should gen fixture");
+// }

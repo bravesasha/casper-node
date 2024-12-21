@@ -9,8 +9,9 @@ use alloc::string::String;
 use casper_contract::contract_api::{runtime, storage};
 
 use casper_types::{
-    runtime_args, ApiError, CLType, ContractHash, ContractVersion, EntryPoint, EntryPointAccess,
-    EntryPointType, EntryPoints, Key, Parameter, RuntimeArgs,
+    contracts::{ContractHash, ContractVersion},
+    runtime_args, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    EntryPointType, EntryPoints, Key, Parameter,
 };
 
 const SUBCALL_NAME: &str = "add_gas";
@@ -55,14 +56,15 @@ fn store() -> (ContractHash, ContractVersion) {
             vec![Parameter::new(ARG_GAS_AMOUNT, CLType::I32)],
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
 
         entry_points.add_entry_point(entry_point);
 
         entry_points
     };
-    storage::new_contract(entry_points, None, None, None)
+    storage::new_contract(entry_points, None, None, None, None)
 }
 
 #[no_mangle]

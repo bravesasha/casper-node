@@ -4,7 +4,10 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     mem,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -17,12 +20,15 @@ use tracing_futures::Instrument;
 
 use casper_types::testing::TestRng;
 
+use casper_types::{Chainspec, ChainspecRawBytes};
+
 use super::ConditionCheckReactor;
 use crate::{
+    components::ComponentState,
     effect::{EffectBuilder, Effects},
     reactor::{Finalize, Reactor, Runner, TryCrankOutcome},
     tls::KeyFingerprint,
-    types::{Chainspec, ChainspecRawBytes, ExitCode, NodeId},
+    types::{ExitCode, NodeId},
     utils::Loadable,
     NodeRng,
 };
@@ -394,6 +400,87 @@ where
             .unwrap_or_else(|_| panic!("network did not settle on condition within {:?}", within))
     }
 
+    /// Runs the main loop of every reactor until a specified node returns the expected exit code.
+    ///
+    /// Panics if the node does not exit inside of `within`, or if any node returns an unexpected
+    /// exit code.
+    pub(crate) async fn settle_on_node_exit(
+        &mut self,
+        rng: &mut TestRng,
+        node_id: &NodeId,
+        expected: ExitCode,
+        within: Duration,
+    ) {
+        time::timeout(
+            within,
+            self.settle_on_node_exit_indefinitely(rng, node_id, expected),
+        )
+        .await
+        .unwrap_or_else(|elapsed| {
+            panic!(
+                "network did not settle on condition within {within:?}, time elapsed: {elapsed:?}",
+            )
+        })
+    }
+
+    /// Keeps cranking the network until every reactor's specified component is in the given state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any reactor returns `None` on its [`Reactor::get_component_state()`] call.
+    pub(crate) async fn _settle_on_component_state(
+        &mut self,
+        rng: &mut TestRng,
+        name: &str,
+        state: &ComponentState,
+        timeout: Duration,
+    ) {
+        self.settle_on(
+            rng,
+            |net| {
+                net.values()
+                    .all(|runner| match runner.reactor().get_component_state(name) {
+                        Some(actual_state) => actual_state == state,
+                        None => panic!("unknown or unsupported component: {}", name),
+                    })
+            },
+            timeout,
+        )
+        .await;
+    }
+
+    /// Starts a background process that will crank all nodes until stopped.
+    ///
+    /// Returns a future that will, once polled, stop all cranking and return the network and the
+    /// the random number generator. Note that the stop command will be sent as soon as the returned
+    /// future is polled (awaited), but no sooner.
+    pub(crate) fn crank_until_stopped(
+        mut self,
+        mut rng: TestRng,
+    ) -> impl futures::Future<Output = (Self, TestRng)>
+    where
+        R: Send + 'static,
+    {
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = tokio::spawn({
+            let stop = stop.clone();
+            async move {
+                while !stop.load(Ordering::Relaxed) {
+                    if self.crank_all(&mut rng).await == 0 {
+                        time::sleep(POLL_INTERVAL).await;
+                    };
+                }
+                (self, rng)
+            }
+        });
+
+        async move {
+            // Trigger the background process stop.
+            stop.store(true, Ordering::Relaxed);
+            handle.await.expect("failed to join background crank")
+        }
+    }
+
     async fn settle_on_exit_indefinitely(&mut self, rng: &mut TestRng, expected: ExitCode) {
         let mut exited_as_expected = 0;
         loop {
@@ -420,6 +507,46 @@ where
                         panic!(
                             "unexpected exit: expected {:?}, got {:?}",
                             expected, exit_code
+                        )
+                    }
+                    TryCrankOutcome::Exited => (),
+                }
+            }
+
+            if event_count == 0 {
+                // No events processed, wait for a bit to avoid 100% cpu usage.
+                Instant::advance_time(POLL_INTERVAL.as_millis() as u64);
+                time::sleep(POLL_INTERVAL).await;
+            }
+        }
+    }
+
+    async fn settle_on_node_exit_indefinitely(
+        &mut self,
+        rng: &mut TestRng,
+        node_id: &NodeId,
+        expected: ExitCode,
+    ) {
+        'outer: loop {
+            let mut event_count = 0;
+            for node in self.nodes.values_mut() {
+                let current_node_id = node.reactor().node_id();
+                match node
+                    .try_crank(rng)
+                    .instrument(error_span!("crank", node_id = %node_id))
+                    .await
+                {
+                    TryCrankOutcome::NoEventsToProcess => (),
+                    TryCrankOutcome::ProcessedAnEvent => event_count += 1,
+                    TryCrankOutcome::ShouldExit(exit_code)
+                        if (exit_code == expected && current_node_id == *node_id) =>
+                    {
+                        debug!(?expected, ?node_id, "node exited with expected code");
+                        break 'outer;
+                    }
+                    TryCrankOutcome::ShouldExit(exit_code) => {
+                        panic!(
+                            "unexpected exit: expected {expected:?} for node {node_id:?}, got {exit_code:?} for node {current_node_id:?}",
                         )
                     }
                     TryCrankOutcome::Exited => (),

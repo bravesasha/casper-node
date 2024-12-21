@@ -49,7 +49,9 @@ use datasize::DataSize;
 use erased_serde::Serialize as ErasedSerialize;
 #[cfg(test)]
 use fake_instant::FakeClock;
-use futures::{future::BoxFuture, FutureExt};
+#[cfg(test)]
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use once_cell::sync::Lazy;
 use prometheus::{self, Histogram, HistogramOpts, IntCounter, IntGauge, Registry};
 use quanta::{Clock, IntoNanoseconds};
@@ -61,7 +63,12 @@ use tracing::{debug_span, error, info, instrument, trace, warn, Span};
 use tracing_futures::Instrument;
 
 #[cfg(test)]
+use crate::components::ComponentState;
+#[cfg(test)]
 use casper_types::testing::TestRng;
+use casper_types::{
+    Block, BlockHeader, Chainspec, ChainspecRawBytes, FinalitySignature, Transaction,
+};
 
 #[cfg(target_os = "linux")]
 use utils::rlimit::{Limit, OpenFiles, ResourceLimit};
@@ -70,9 +77,10 @@ use utils::rlimit::{Limit, OpenFiles, ResourceLimit};
 use crate::testing::{network::NetworkedReactor, ConditionCheckReactor};
 use crate::{
     components::{
-        block_accumulator, deploy_acceptor,
+        block_accumulator,
         fetcher::{self, FetchItem},
         network::{blocklist::BlocklistJustification, Identity as NetworkIdentity},
+        transaction_acceptor,
     },
     effect::{
         announcements::{ControlAnnouncement, PeerBehaviorAnnouncement, QueueDumpFormat},
@@ -80,15 +88,12 @@ use crate::{
         Effect, EffectBuilder, EffectExt, Effects,
     },
     failpoints::FailpointActivation,
-    types::{
-        ApprovalsHashes, Block, BlockExecutionResultsOrChunk, BlockHeader, Chainspec,
-        ChainspecRawBytes, Deploy, ExitCode, FinalitySignature, LegacyDeploy, NodeId, SyncLeap,
-        TrieOrChunk,
-    },
+    types::{BlockExecutionResultsOrChunk, ExitCode, LegacyDeploy, NodeId, SyncLeap, TrieOrChunk},
     unregister_metric,
     utils::{self, SharedFlag, WeightedRoundRobin},
     NodeRng, TERMINATION_REQUESTED,
 };
+use casper_storage::block_store::types::ApprovalsHashes;
 pub(crate) use queue_kind::QueueKind;
 
 /// Default threshold for when an event is considered slow.  Can be overridden by setting the env
@@ -219,7 +224,7 @@ impl<REv> EventQueueHandle<REv> {
     where
         REv: From<Ev>,
     {
-        self.schedule_with_ancestor(None, event, queue_kind).await
+        self.schedule_with_ancestor(None, event, queue_kind).await;
     }
 
     /// Schedule an event on a specific queue.
@@ -233,7 +238,7 @@ impl<REv> EventQueueHandle<REv> {
     {
         self.scheduler
             .push((ancestor, event.into()), queue_kind)
-            .await
+            .await;
     }
 
     /// Returns number of events in each of the scheduler's queues.
@@ -301,6 +306,16 @@ pub(crate) trait Reactor: Sized {
         // Default is to ignore the failpoint. If failpoint support is enabled for a reactor, route
         // the activation to the respective components here.
     }
+
+    /// Returns the state of a named components.
+    ///
+    /// May return `None` if the component cannot be found, or if the reactor does not support
+    /// querying component states.
+    #[allow(dead_code)]
+    #[cfg(test)]
+    fn get_component_state(&self, _name: &str) -> Option<&ComponentState> {
+        None
+    }
 }
 
 /// A reactor event type.
@@ -322,6 +337,7 @@ pub(crate) trait ReactorEvent: Send + Debug + From<ControlAnnouncement> + 'stati
 /// A drop-like trait for `async` compatible drop-and-wait.
 ///
 /// Shuts down a type by explicitly freeing resources, but allowing to wait on cleanup to complete.
+#[cfg(test)]
 pub(crate) trait Finalize: Sized {
     /// Runs cleanup code and waits for a shutdown to complete.
     ///
@@ -526,8 +542,7 @@ where
         );
         // Run all effects from component instantiation.
         process_effects(None, scheduler, initial_effects, QueueKind::Regular)
-            .instrument(debug_span!("process initial effects"))
-            .await;
+            .instrument(debug_span!("process initial effects"));
 
         info!("reactor main loop is ready");
 
@@ -615,6 +630,11 @@ where
                 Some(ControlAnnouncement::ShutdownForUpgrade) => {
                     (Effects::new(), Some(ExitCode::Success), QueueKind::Control)
                 }
+                Some(ControlAnnouncement::ShutdownAfterCatchingUp) => (
+                    Effects::new(),
+                    Some(ExitCode::CleanExitDontRestart),
+                    QueueKind::Control,
+                ),
                 Some(ControlAnnouncement::FatalError { file, line, msg }) => {
                     error!(%file, %line, %msg, "fatal error via control announcement");
                     (Effects::new(), Some(ExitCode::Abort), QueueKind::Control)
@@ -646,7 +666,7 @@ where
                                                     warn!(
                                                         ?err,
                                                         "failed to write/flush queue dump using debug format"
-                                                    )
+                                                    );
                                                 })
                                                 .ok();
                                         })
@@ -698,9 +718,7 @@ where
             self.scheduler,
             effects,
             queue_kind,
-        )
-        .in_current_span()
-        .await;
+        );
 
         self.current_event_id += 1;
 
@@ -824,12 +842,10 @@ where
 
         let effects = create_effects(effect_builder);
 
-        process_effects(None, self.scheduler, effects, QueueKind::Regular)
-            .instrument(debug_span!(
-                "process injected effects",
-                ev = self.current_event_id
-            ))
-            .await;
+        process_effects(None, self.scheduler, effects, QueueKind::Regular).instrument(debug_span!(
+            "process injected effects",
+            ev = self.current_event_id
+        ));
     }
 
     /// Processes a single event if there is one and we haven't previously handled an exit code.
@@ -925,7 +941,7 @@ where
 /// Spawns tasks that will process the given effects.
 ///
 /// Result events from processing the events will be scheduled with the given ancestor.
-async fn process_effects<Ev>(
+fn process_effects<Ev>(
     ancestor: Option<NonZeroU64>,
     scheduler: &'static Scheduler<Ev>,
     effects: Effects<Ev>,
@@ -936,7 +952,7 @@ async fn process_effects<Ev>(
     for effect in effects {
         tokio::spawn(async move {
             for event in effect.await {
-                scheduler.push((ancestor, event), queue_kind).await
+                scheduler.push((ancestor, event), queue_kind).await;
             }
         });
     }
@@ -949,7 +965,7 @@ where
     Ev: Send + 'static,
     REv: Send + 'static,
 {
-    // TODO: The double-boxing here is very unfortunate =(.
+    // The double-boxing here is very unfortunate =(.
     (async move {
         let events = effect.await;
         events.into_iter().map(wrap).collect()
@@ -1004,13 +1020,13 @@ fn handle_get_response<R>(
 ) -> Effects<<R as Reactor>::Event>
 where
     R: Reactor,
-    <R as Reactor>::Event: From<deploy_acceptor::Event>
+    <R as Reactor>::Event: From<transaction_acceptor::Event>
         + From<fetcher::Event<FinalitySignature>>
         + From<fetcher::Event<Block>>
         + From<fetcher::Event<BlockHeader>>
         + From<fetcher::Event<BlockExecutionResultsOrChunk>>
         + From<fetcher::Event<LegacyDeploy>>
-        + From<fetcher::Event<Deploy>>
+        + From<fetcher::Event<Transaction>>
         + From<fetcher::Event<SyncLeap>>
         + From<fetcher::Event<TrieOrChunk>>
         + From<fetcher::Event<ApprovalsHashes>>
@@ -1018,7 +1034,7 @@ where
         + From<PeerBehaviorAnnouncement>,
 {
     match *message {
-        NetResponse::Deploy(ref serialized_item) => handle_fetch_response::<R, Deploy>(
+        NetResponse::Transaction(ref serialized_item) => handle_fetch_response::<R, Transaction>(
             reactor,
             effect_builder,
             rng,

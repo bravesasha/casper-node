@@ -154,6 +154,22 @@ pub enum Error {
     /// assert_eq!(22, Error::DisabledUnrestrictedTransfers as u8);
     DisabledUnrestrictedTransfers = 22,
 
+    /// Attempt to access a record using forged permissions.
+    /// ```
+    /// # use casper_types::system::mint::Error;
+    /// assert_eq!(23, Error::ForgedReference as u8);
+    ForgedReference = 23,
+    /// Available balance can never be greater than total balance.
+    /// ```
+    /// # use casper_types::system::mint::Error;
+    /// assert_eq!(24, Error::InconsistentBalances as u8);
+    InconsistentBalances = 24,
+    /// Unable to get the system registry.
+    /// ```
+    /// # use casper_types::system::mint::Error;
+    /// assert_eq!(25, Error::UnableToGetSystemRegistry as u8);
+    UnableToGetSystemRegistry = 25,
+
     #[cfg(test)]
     #[doc(hidden)]
     Sentinel,
@@ -208,6 +224,11 @@ impl TryFrom<u8> for Error {
             d if d == Error::UnapprovedSpendingAmount as u8 => Ok(Error::UnapprovedSpendingAmount),
             d if d == Error::DisabledUnrestrictedTransfers as u8 => {
                 Ok(Error::DisabledUnrestrictedTransfers)
+            }
+            d if d == Error::ForgedReference as u8 => Ok(Error::ForgedReference),
+            d if d == Error::InconsistentBalances as u8 => Ok(Error::InconsistentBalances),
+            d if d == Error::UnableToGetSystemRegistry as u8 => {
+                Ok(Error::UnableToGetSystemRegistry)
             }
             _ => Err(TryFromU8ForError(())),
         }
@@ -269,6 +290,13 @@ impl Display for Error {
             Error::DisabledUnrestrictedTransfers => {
                 formatter.write_str("Disabled unrestricted transfers")
             }
+            Error::ForgedReference => formatter.write_str("Forged reference"),
+            Error::InconsistentBalances => {
+                formatter.write_str("Available balance can never be greater than total balance")
+            }
+            Error::UnableToGetSystemRegistry => {
+                formatter.write_str("Unable to get the system registry")
+            }
             #[cfg(test)]
             Error::Sentinel => formatter.write_str("Sentinel error"),
         }
@@ -281,7 +309,7 @@ mod tests {
 
     #[test]
     fn error_round_trips() {
-        for i in 0..=u8::max_value() {
+        for i in 0..=u8::MAX {
             match Error::try_from(i) {
                 Ok(error) if i < MAX_ERROR_VALUE => assert_eq!(error as u8, i),
                 Ok(error) => panic!(

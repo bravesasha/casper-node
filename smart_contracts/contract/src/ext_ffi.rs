@@ -2,6 +2,10 @@
 //!
 //! Generally should not be used directly.  See the [`contract_api`](crate::contract_api) for
 //! high-level bindings suitable for writing smart contracts.
+
+#[cfg(doc)]
+use alloc::collections::BTreeMap;
+
 extern "C" {
     /// The bytes in the span of wasm memory from `key_ptr` to `key_ptr + key_size` must correspond
     /// to a valid global state key, otherwise the function will fail. If the key is de-serialized
@@ -72,7 +76,8 @@ extern "C" {
     /// * `total_keys`: number of authorization keys used to sign this deploy
     /// * `result_size`: size of the data loaded in the host
     pub fn casper_load_authorization_keys(total_keys: *mut usize, result_size: *mut usize) -> i32;
-    ///
+    /// This function loads a set of named keys from the host. The data will be available through
+    /// the host buffer and can be copied to Wasm memory through [`casper_read_host_buffer`].
     pub fn casper_load_named_keys(total_keys: *mut usize, result_size: *mut usize) -> i32;
     /// This function causes a `Trap`, terminating the currently running module,
     /// but first copies the bytes from `value_ptr` to `value_ptr + value_size` to
@@ -90,7 +95,7 @@ extern "C" {
     /// * `value_ptr`: pointer to bytes representing the value to return to the caller
     /// * `value_size`: size of the value (in bytes)
     pub fn casper_ret(value_ptr: *const u8, value_size: usize) -> !;
-    ///
+    /// Retrieves a key from the named keys by name and writes it to the output buffer.
     pub fn casper_get_key(
         name_ptr: *const u8,
         name_size: usize,
@@ -98,16 +103,16 @@ extern "C" {
         output_size: usize,
         bytes_written_ptr: *mut usize,
     ) -> i32;
-    ///
+    /// This function checks if the key with the given name is present in the named keys.
     pub fn casper_has_key(name_ptr: *const u8, name_size: usize) -> i32;
-    ///
+    /// This function stores a key under the given name in the named keys.
     pub fn casper_put_key(
         name_ptr: *const u8,
         name_size: usize,
         key_ptr: *const u8,
         key_size: usize,
     );
-    ///
+    /// This function removes a key with the given name from the named keys.
     pub fn casper_remove_key(name_ptr: *const u8, name_size: usize);
     /// This function causes a `Trap` which terminates the currently running
     /// module. Additionally, it signals that the current entire phase of
@@ -194,8 +199,8 @@ extern "C" {
     ///
     /// # Arguments
     ///
-    /// * `public_key` - pointer to the bytes in wasm memory representing the
-    ///  public key to update, presently only 32-byte public keys are supported
+    /// * `public_key` - pointer to the bytes in wasm memory representing the public key to update,
+    ///   presently only 32-byte public keys are supported.
     /// * `weight` - the weight to assign to this public key
     pub fn casper_update_associated_key(
         account_hash_ptr: *const u8,
@@ -368,52 +373,6 @@ extern "C" {
         id_ptr: *const u8,
         id_size: usize,
     ) -> i32;
-    /// Records a transfer.  Can only be called from within the mint contract.
-    /// Needed to support system contract-based execution.
-    ///
-    /// # Arguments
-    ///
-    /// * `maybe_to_ptr` - pointer in wasm memory to bytes representing the recipient
-    ///   `Option<AccountHash>`
-    /// * `maybe_to_size` - size of the source `Option<AccountHash>` (in bytes)
-    /// * `source_ptr` - pointer in wasm memory to bytes representing the source `URef` to transfer
-    ///   from
-    /// * `source_size` - size of the source `URef` (in bytes)
-    /// * `target_ptr` - pointer in wasm memory to bytes representing the target `URef` to transfer
-    ///   to
-    /// * `target_size` - size of the target (in bytes)
-    /// * `amount_ptr` - pointer in wasm memory to bytes representing the amount to transfer to the
-    ///   target account
-    /// * `amount_size` - size of the amount (in bytes)
-    /// * `id_ptr` - pointer in wasm memory to bytes representing the user-defined transaction id
-    /// * `id_size` - size of the id (in bytes)
-    pub fn casper_record_transfer(
-        maybe_to_ptr: *const u8,
-        maybe_to_size: usize,
-        source_ptr: *const u8,
-        source_size: usize,
-        target_ptr: *const u8,
-        target_size: usize,
-        amount_ptr: *const u8,
-        amount_size: usize,
-        id_ptr: *const u8,
-        id_size: usize,
-    ) -> i32;
-    /// Records era info.  Can only be called from within the auction contract.
-    /// Needed to support system contract-based execution.
-    ///
-    /// # Arguments
-    ///
-    /// * `era_id_ptr` - pointer in wasm memory to bytes representing the `EraId`
-    /// * `era_id_size` - size of the `EraId` (in bytes)
-    /// * `era_info_ptr` - pointer in wasm memory to bytes representing the `EraInfo`
-    /// * `era_info_size` - size of the `EraInfo` (in bytes)
-    pub fn casper_record_era_info(
-        era_id_ptr: *const u8,
-        era_id_size: usize,
-        era_info_ptr: *const u8,
-        era_info_size: usize,
-    ) -> i32;
     /// This function uses the mint contract's balance function to get the balance
     /// of the specified purse. It causes a `Trap` if the bytes in wasm memory
     /// from `purse_ptr` to `purse_ptr + purse_size` cannot be
@@ -446,13 +405,13 @@ extern "C" {
     ///
     /// * `dest_ptr` - pointer to position in wasm memory to write the result
     pub fn casper_get_phase(dest_ptr: *mut u8);
-    ///
+    /// Retrieves a system contract by index and writes it to the destination pointer.
     pub fn casper_get_system_contract(
         system_contract_index: u32,
         dest_ptr: *mut u8,
         dest_size: usize,
     ) -> i32;
-    ///
+    /// Retrieves the main purse and writes it to the destination pointer.
     pub fn casper_get_main_purse(dest_ptr: *mut u8);
     /// This function copies the contents of the current runtime buffer into the
     /// wasm memory, beginning at the provided offset. It is intended that this
@@ -476,7 +435,7 @@ extern "C" {
         bytes_written: *mut usize,
     ) -> i32;
     /// Creates new contract package at hash. Returns both newly generated
-    /// [`casper_types::ContractPackageHash`] and a [`casper_types::URef`] for further
+    /// [`casper_types::PackageHash`] and a [`casper_types::URef`] for further
     /// modifying access.
     pub fn casper_create_contract_package_at_hash(
         hash_addr_ptr: *mut u8,
@@ -506,7 +465,7 @@ extern "C" {
         existing_urefs_size: usize,
         output_size_ptr: *mut usize,
     ) -> i32;
-    /// Adds new contract version to a contract package.
+    /// Adds new contract version to a contract package without message topics.
     ///
     /// # Arguments
     ///
@@ -515,8 +474,8 @@ extern "C" {
     /// * `version_ptr` - output parameter where new version assigned by host is set
     /// * `entry_points_ptr` - pointer to serialized [`casper_types::EntryPoints`]
     /// * `entry_points_size` - size of serialized [`casper_types::EntryPoints`]
-    /// * `named_keys_ptr` - pointer to serialized [`casper_types::contracts::NamedKeys`]
-    /// * `named_keys_size` - size of serialized [`casper_types::contracts::NamedKeys`]
+    /// * `named_keys_ptr` - pointer to serialized [`casper_types::NamedKeys`]
+    /// * `named_keys_size` - size of serialized [`casper_types::NamedKeys`]
     /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
     /// * `output_size` - size of memory area that host can write to
     /// * `bytes_written_ptr` - pointer to a value where host will set a number of bytes written to
@@ -532,6 +491,64 @@ extern "C" {
         output_ptr: *mut u8,
         output_size: usize,
         bytes_written_ptr: *mut usize,
+    ) -> i32;
+    /// Adds a new version to a contract package with message topics.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_package_hash_ptr` - pointer to serialized package hash.
+    /// * `contract_package_hash_size` - size of package hash in serialized form.
+    /// * `version_ptr` - output parameter where new version assigned by host is set
+    /// * `entry_points_ptr` - pointer to serialized [`casper_types::EntryPoints`]
+    /// * `entry_points_size` - size of serialized [`casper_types::EntryPoints`]
+    /// * `named_keys_ptr` - pointer to serialized [`casper_types::NamedKeys`]
+    /// * `named_keys_size` - size of serialized [`casper_types::NamedKeys`]
+    /// * `message_topics_ptr` - pointer to serialized BTreeMap<String, MessageTopicOperation>
+    ///   containing message topic names and the operation to pe performed on each one.
+    /// * `message_topics_size` - size of serialized BTreeMap<String, MessageTopicOperation>
+    /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
+    /// * `output_size` - expected width of output (currently 32)
+    pub fn casper_add_contract_version_with_message_topics(
+        contract_package_hash_ptr: *const u8,
+        contract_package_hash_size: usize,
+        version_ptr: *const u32,
+        entry_points_ptr: *const u8,
+        entry_points_size: usize,
+        named_keys_ptr: *const u8,
+        named_keys_size: usize,
+        message_topics_ptr: *const u8,
+        message_topics_size: usize,
+        output_ptr: *mut u8,
+        output_size: usize,
+    ) -> i32;
+    /// Adds a new version to a package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_hash_ptr` - pointer to serialized package hash.
+    /// * `package_hash_size` - size of package hash in serialized form.
+    /// * `version_ptr` - output parameter where new version assigned by host is set
+    /// * `entry_points_ptr` - pointer to serialized [`casper_types::EntryPoints`]
+    /// * `entry_points_size` - size of serialized [`casper_types::EntryPoints`]
+    /// * `named_keys_ptr` - pointer to serialized [`casper_types::NamedKeys`]
+    /// * `named_keys_size` - size of serialized [`casper_types::NamedKeys`]
+    /// * `message_topics_ptr` - pointer to serialized BTreeMap<String, MessageTopicOperation>
+    ///   containing message topic names and the operation to pe performed on each one.
+    /// * `message_topics_size` - size of serialized BTreeMap<String, MessageTopicOperation>
+    /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
+    /// * `output_size` - expected width of output (currently 32)
+    pub fn casper_add_package_version(
+        package_hash_ptr: *const u8,
+        package_hash_size: usize,
+        version_ptr: *const u32,
+        entry_points_ptr: *const u8,
+        entry_points_size: usize,
+        named_keys_ptr: *const u8,
+        named_keys_size: usize,
+        message_topics_ptr: *const u8,
+        message_topics_size: usize,
+        output_ptr: *mut u8,
+        output_size: usize,
     ) -> i32;
     /// Disables contract in a contract package. Returns non-zero standard error for a failure,
     /// otherwise a zero indicates success.
@@ -699,13 +716,19 @@ extern "C" {
     /// * `in_size` - length of bytes
     /// * `out_ptr` - pointer to the location where argument bytes will be copied from the host side
     /// * `out_size` - size of output pointer
+    #[deprecated(note = "Superseded by ext_ffi::casper_generic_hash")]
     pub fn casper_blake2b(
         in_ptr: *const u8,
         in_size: usize,
         out_ptr: *mut u8,
         out_size: usize,
     ) -> i32;
+    /// Returns the elements on the call stack tracked by the runtime
     ///
+    /// # Arguments
+    /// * `call_stack_len_ptr` - pointer to the length of the caller information.
+    /// * `result_size_ptr` - pointer to the size of the serialized caller information.
+    #[deprecated]
     pub fn casper_load_call_stack(
         call_stack_len_ptr: *mut usize,
         result_size_ptr: *mut usize,
@@ -804,5 +827,127 @@ extern "C" {
         contract_package_hash_size: usize,
         contract_hash_ptr: *const u8,
         contract_hash_size: usize,
+    ) -> i32;
+    /// Manages a message topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic_name_ptr` - pointer to the topic name UTF-8 string.
+    /// * `topic_name_size` - size of the serialized name string.
+    /// * `operation_ptr` - pointer to the management operation to be performed for the specified
+    ///   topic.
+    /// * `operation_ptr_size` - size of the operation.
+    pub fn casper_manage_message_topic(
+        topic_name_ptr: *const u8,
+        topic_name_size: usize,
+        operation_ptr: *const u8,
+        operation_size: usize,
+    ) -> i32;
+    /// Emits a new message on the specified topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic_name_ptr` - pointer to the topic name UTF-8 string where the message will be
+    ///   emitted.
+    /// * `topic_name_size` - size of the serialized name string.
+    /// * `message_ptr` - pointer to the serialized message payload to be emitted.
+    /// * `message_size` - size of the serialized message payload.
+    pub fn casper_emit_message(
+        topic_name_ptr: *const u8,
+        topic_name_size: usize,
+        message_ptr: *const u8,
+        message_size: usize,
+    ) -> i32;
+
+    /// Returns information about the current call stack tracked by the runtime
+    /// based on an action
+    /// `0` => Initiator of the call chain
+    /// `1` => Immediate caller
+    /// `2` => The entire call stack
+    ///
+    /// # Arguments
+    /// `action`: u8 which encodes the information requested by the caller.
+    /// * `call_stack_len_ptr` - pointer to the length of the caller information.
+    /// * `result_size_ptr` - pointer to the size of the serialized caller information.
+    pub fn casper_load_caller_information(
+        action: u8,
+        call_stack_len_ptr: *mut usize,
+        result_size_ptr: *mut usize,
+    ) -> i32;
+
+    /// This function gets the requested field at `field_idx`. It is up to
+    /// the caller to ensure that the correct number of bytes for the field data
+    /// are allocated at `dest_ptr`, otherwise data corruption in the wasm memory may occur.
+    ///
+    /// # Arguments
+    ///
+    /// * `field_idx` - what info field is requested?
+    /// * 0 => block time (functionally equivalent to earlier get_blocktime ffi)
+    /// * 1 => block height
+    /// * 2 => parent block hash
+    /// * 3 => state hash
+    /// * `dest_ptr` => pointer in wasm memory where to write the result
+    pub fn casper_get_block_info(field_idx: u8, dest_ptr: *const u8);
+
+    /// Computes digest hash, using provided algorithm type.
+    ///
+    /// # Arguments
+    ///
+    /// * `in_ptr` - pointer to the location where argument bytes will be copied from the host side
+    /// * `in_size` - size of output pointer
+    /// * `hash_algo_type` - integer representation of HashAlgorithm enum variant
+    /// * `out_ptr` - pointer to the location where argument bytes will be copied to the host side
+    /// * `out_size` - size of output pointer
+    pub fn casper_generic_hash(
+        in_ptr: *const u8,
+        in_size: usize,
+        hash_algo_type: u8,
+        out_ptr: *const u8,
+        out_size: usize,
+    ) -> i32;
+
+    /// Recovers a Secp256k1 public key from a signed message
+    /// and a signature used in the process of signing.
+    ///
+    /// # Arguments
+    ///
+    /// * `message_ptr` - pointer to the signed data
+    /// * `message_size` - length of the signed data in bytes
+    /// * `signature_ptr` - pointer to byte-encoded signature
+    /// * `signature_size` - length of the byte-encoded signature
+    /// * `out_ptr` - pointer to a buffer of size PublicKey::SECP256K1_LENGTH which will be
+    ///   populated with the recovered key's bytes representation
+    /// * `recovery_id` - an integer value 0, 1, 2, or 3 used to select the correct public key from
+    ///   the signature:
+    ///   - Low bit (0/1): was the y-coordinate of the affine point resulting from the fixed-base
+    ///     multiplication 𝑘×𝑮 odd?
+    ///   - Hi bit (3/4): did the affine x-coordinate of 𝑘×𝑮 overflow the order of the scalar field,
+    ///     requiring a reduction when computing r?
+    pub fn casper_recover_secp256k1(
+        message_ptr: *const u8,
+        message_size: usize,
+        signature_ptr: *const u8,
+        signature_size: usize,
+        out_ptr: *const u8,
+        recovery_id: u8,
+    ) -> i32;
+
+    /// Verifies the signature of the given message against the given public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `message_ptr` - pointer to the signed data
+    /// * `message_size` - length of the signed data in bytes
+    /// * `signature_ptr` - pointer to byte-encoded signature
+    /// * `signature_size` - length of the byte-encoded signature
+    /// * `public_key_ptr` - pointer to byte-encoded public key
+    /// * `public_key_size` - length of the byte-encoded public key
+    pub fn casper_verify_signature(
+        message_ptr: *const u8,
+        message_size: usize,
+        signature_ptr: *const u8,
+        signature_size: usize,
+        public_key_ptr: *const u8,
+        public_key_size: usize,
     ) -> i32;
 }

@@ -12,14 +12,11 @@ use std::{
     path::PathBuf,
 };
 
+use casper_types::{Chainspec, TimeDiff, Timestamp, U512};
 use datasize::DataSize;
 use itertools::Itertools;
-use num_rational::Ratio;
-use num_traits::CheckedMul;
 use rand::RngCore;
 use tracing::{debug, error, info, trace, warn};
-
-use casper_types::{system::auction::BLOCK_REWARD, TimeDiff, Timestamp, U512};
 
 use crate::{
     components::consensus::{
@@ -43,7 +40,7 @@ use crate::{
         utils::ValidatorIndex,
         ActionId, TimerId,
     },
-    types::{Chainspec, NodeId},
+    types::NodeId,
     NodeRng,
 };
 
@@ -100,6 +97,7 @@ impl<C: Context + 'static> HighwayProtocol<C> {
         era_start_time: Timestamp,
         seed: u64,
         now: Timestamp,
+        protocol_state_file: Option<PathBuf>,
     ) -> (Box<dyn ConsensusProtocol<C>>, ProtocolOutcomes<C>) {
         let validators_count = validator_stakes.len();
         let validators = protocols::common::validators::<C>(faulty, inactive, validator_stakes);
@@ -160,24 +158,8 @@ impl<C: Context + 'static> HighwayProtocol<C> {
             .saturating_mul(2)
             .min(MAX_ENDORSEMENT_EVIDENCE_LIMIT);
 
-        let block_reward = if chainspec.core_config.compute_rewards {
-            BLOCK_REWARD
-        } else {
-            // Set the block reward parameter to 0 so Highway can skip the computation.
-            0
-        };
-
-        let reduced_block_reward = match highway_config
-            .reduced_reward_multiplier
-            .checked_mul(&Ratio::from(block_reward))
-        {
-            None => u64::MAX,
-            Some(ratio) => ratio.to_integer(),
-        };
         let params = Params::new(
             seed,
-            block_reward,
-            reduced_block_reward,
             minimum_round_length,
             maximum_round_length,
             init_round_len,
@@ -189,7 +171,7 @@ impl<C: Context + 'static> HighwayProtocol<C> {
 
         let outcomes = Self::initialize_timers(now, era_start_time, &config.highway);
 
-        let highway = Highway::new(instance_id, validators, params);
+        let highway = Highway::new(instance_id, validators, params, protocol_state_file);
         let hw_proto = Box::new(HighwayProtocol {
             pending_values: HashMap::new(),
             finality_detector: FinalityDetector::new(ftt),
@@ -358,9 +340,8 @@ impl<C: Context + 'static> HighwayProtocol<C> {
                     });
                 }
                 return outcomes;
-            } else {
-                self.log_proposal(vertex, "proposal does not need validation");
             }
+            self.log_proposal(vertex, "proposal does not need validation");
         }
 
         // Either consensus value doesn't need validation or it's not a proposal.
@@ -690,7 +671,7 @@ mod relaxed {
     };
 
     #[derive(
-        DataSize, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, EnumDiscriminants, Hash,
+        DataSize, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, EnumDiscriminants,
     )]
     #[serde(bound(
         serialize = "C::Hash: Serialize",

@@ -23,7 +23,7 @@ pub enum Error {
     /// assert_eq!(0, Error::MissingKey as u8);
     /// ```
     MissingKey = 0,
-    /// Given named key contains invalid variant.
+    /// Invalid key variant.
     /// ```
     /// # use casper_types::system::auction::Error;
     /// assert_eq!(1, Error::InvalidKeyVariant as u8);
@@ -127,7 +127,7 @@ pub enum Error {
     /// assert_eq!(17, Error::InvalidPublicKey as u8);
     /// ```
     InvalidPublicKey = 17,
-    /// Validator is not not bonded.
+    /// Validator is not bonded.
     /// ```
     /// # use casper_types::system::auction::Error;
     /// assert_eq!(18, Error::BondNotFound as u8);
@@ -327,6 +327,80 @@ pub enum Error {
     /// assert_eq!(49, Error::TransferToAdministrator as u8);
     /// ```
     TransferToAdministrator = 49,
+    /// Failed to transfer desired amount into administrators account.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(50, Error::ForgedReference as u8);
+    /// ```
+    ForgedReference = 50,
+    /// Unable to find purse.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(51, Error::MissingPurse as u8);
+    /// ```
+    MissingPurse = 51,
+    /// Failed to transfer validator bid to new public key.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(52, Error::ValidatorBidExistsAlready as u8);
+    /// ```
+    ValidatorBidExistsAlready = 52,
+    /// Failed to look up current validator bid
+    /// because it's public key has been changed
+    /// and bridge record chain is too long to follow.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(53, Error::BridgeRecordChainTooLong as u8);
+    /// ```
+    BridgeRecordChainTooLong = 53,
+    /// Unexpected bid variant.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(54, Error::UnexpectedBidVariant as u8);
+    /// ```
+    UnexpectedBidVariant = 54,
+    /// The delegated amount is above the maximum allowed.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(55, Error::DelegationAmountTooLarge as u8);
+    /// ```
+    DelegationAmountTooLarge = 55,
+    /// Reservation was not found in the map.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(56, Error::ReservationNotFound as u8);
+    /// ```
+    ReservationNotFound = 56,
+    /// Validator exceeded allowed number of reserved delegator slots.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(57, Error::ExceededReservationSlotsLimit as u8);
+    /// ```
+    ExceededReservationSlotsLimit = 57,
+    /// All reserved slots for validator are already occupied.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(58, Error::ExceededReservationsLimit as u8);
+    /// ```
+    ExceededReservationsLimit = 58,
+    /// Reserved slots count is less than number of existing reservations.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(59, Error::ReservationSlotsCountTooSmall as u8);
+    /// ```
+    ReservationSlotsCountTooSmall = 59,
+    /// Unexpected unbond variant.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(60, Error::UnexpectedUnbondVariant as u8);
+    /// ```
+    UnexpectedUnbondVariant = 60,
+    /// Unexpected stored value variant.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(61, Error::UnexpectedStoredValueVariant as u8);
+    /// ```
+    UnexpectedStoredValueVariant = 61,
 }
 
 impl Display for Error {
@@ -382,6 +456,18 @@ impl Display for Error {
             Error::AuctionBidsDisabled => formatter.write_str("Auction bids are disabled"),
             Error::GetAccumulationPurse => formatter.write_str("Get accumulation purse error"),
             Error::TransferToAdministrator => formatter.write_str("Transfer to administrator error"),
+            Error::ForgedReference => formatter.write_str("Forged reference"),
+            Error::MissingPurse => formatter.write_str("Missing purse"),
+            Error::ValidatorBidExistsAlready => formatter.write_str("Validator bid with given public key already exists"),
+            Error::BridgeRecordChainTooLong => formatter.write_str("Bridge record chain is too long to find current validator bid"),
+            Error::UnexpectedBidVariant => formatter.write_str("Unexpected bid variant"),
+            Error::DelegationAmountTooLarge => formatter.write_str("The delegated amount is above the maximum allowed"),
+            Error::ReservationNotFound => formatter.write_str("Reservation not found"),
+            Error::ExceededReservationSlotsLimit => formatter.write_str("Validator exceeded allowed number of reserved delegator slots"),
+            Error::ExceededReservationsLimit => formatter.write_str("All reserved slots for validator are already occupied"),
+            Error::ReservationSlotsCountTooSmall => formatter.write_str("Reserved slots count is less than number of existing reservations"),
+            Error::UnexpectedUnbondVariant => formatter.write_str("Unexpected unbond variant"),
+            Error::UnexpectedStoredValueVariant => formatter.write_str("Unexpected stored value variant"),
         }
     }
 }
@@ -463,6 +549,28 @@ impl TryFrom<u8> for Error {
             d if d == Error::AuctionBidsDisabled as u8 => Ok(Error::AuctionBidsDisabled),
             d if d == Error::GetAccumulationPurse as u8 => Ok(Error::GetAccumulationPurse),
             d if d == Error::TransferToAdministrator as u8 => Ok(Error::TransferToAdministrator),
+            d if d == Error::ForgedReference as u8 => Ok(Error::ForgedReference),
+            d if d == Error::MissingPurse as u8 => Ok(Error::MissingPurse),
+            d if d == Error::ValidatorBidExistsAlready as u8 => {
+                Ok(Error::ValidatorBidExistsAlready)
+            }
+            d if d == Error::BridgeRecordChainTooLong as u8 => Ok(Error::BridgeRecordChainTooLong),
+            d if d == Error::UnexpectedBidVariant as u8 => Ok(Error::UnexpectedBidVariant),
+            d if d == Error::DelegationAmountTooLarge as u8 => Ok(Error::DelegationAmountTooLarge),
+            d if d == Error::ReservationNotFound as u8 => Ok(Error::ReservationNotFound),
+            d if d == Error::ExceededReservationSlotsLimit as u8 => {
+                Ok(Error::ExceededReservationSlotsLimit)
+            }
+            d if d == Error::ExceededReservationsLimit as u8 => {
+                Ok(Error::ExceededReservationsLimit)
+            }
+            d if d == Error::ReservationSlotsCountTooSmall as u8 => {
+                Ok(Error::ReservationSlotsCountTooSmall)
+            }
+            d if d == Error::UnexpectedUnbondVariant as u8 => Ok(Error::UnexpectedUnbondVariant),
+            d if d == Error::UnexpectedStoredValueVariant as u8 => {
+                Ok(Error::UnexpectedStoredValueVariant)
+            }
             _ => Err(TryFromU8ForError(())),
         }
     }
@@ -485,7 +593,7 @@ impl FromBytes for Error {
         let error: Error = value
             .try_into()
             // In case an Error variant is unable to be determined it would return an
-            // Error::Formatting as if its unable to be correctly deserialized.
+            // Error::Formatting as if it's unable to be correctly deserialized.
             .map_err(|_| bytesrepr::Error::Formatting)?;
         Ok((error, rem))
     }
@@ -507,7 +615,7 @@ pub enum PurseLookupError {
 impl From<PurseLookupError> for Error {
     fn from(error: PurseLookupError) -> Self {
         match error {
-            PurseLookupError::KeyNotFound => Error::MissingKey,
+            PurseLookupError::KeyNotFound => Error::MissingPurse,
             PurseLookupError::KeyUnexpectedType => Error::InvalidKeyVariant,
         }
     }
@@ -531,7 +639,7 @@ mod tests {
 
     #[test]
     fn error_backward_trips() {
-        for u8 in 0..=u8::max_value() {
+        for u8 in 0..=u8::MAX {
             match Error::try_from(u8) {
                 Ok(error_variant) => {
                     assert_eq!(u8, error_variant as u8, "Error code mismatch")

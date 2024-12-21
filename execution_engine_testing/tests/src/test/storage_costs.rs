@@ -1,26 +1,24 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use num_rational::Ratio;
+use num_traits::Zero;
 use once_cell::sync::Lazy;
 
 #[cfg(not(feature = "use-as-wasm"))]
 use casper_engine_test_support::DEFAULT_ACCOUNT_PUBLIC_KEY;
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNT_ADDR,
-    DEFAULT_PROTOCOL_VERSION, PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNT_ADDR,
+    DEFAULT_PROTOCOL_VERSION, LOCAL_GENESIS_REQUEST,
 };
 #[cfg(not(feature = "use-as-wasm"))]
-use casper_execution_engine::shared::system_config::auction_costs::DEFAULT_ADD_BID_COST;
-use casper_execution_engine::{
-    core::engine_state::EngineConfigBuilder,
-    shared::{
-        host_function_costs::{HostFunction, HostFunctionCosts},
-        opcode_costs::{BrTableCost, ControlFlowCosts, OpcodeCosts},
-        storage_costs::StorageCosts,
-        wasm_config::{WasmConfig, DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY},
-    },
-};
+use casper_types::DEFAULT_ADD_BID_COST;
 use casper_types::{
     bytesrepr::{Bytes, ToBytes},
-    CLValue, ContractHash, EraId, ProtocolVersion, RuntimeArgs, StoredValue, U512,
+    contracts::{ContractHash, ContractPackage, ContractVersionKey},
+    AddressableEntityHash, BrTableCost, CLValue, ControlFlowCosts, EraId, Gas, Group, Groups,
+    HostFunctionCosts, Key, MessageLimits, OpcodeCosts, ProtocolVersion, RuntimeArgs, StorageCosts,
+    StoredValue, URef, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
+    DEFAULT_V1_WASM_MAX_MEMORY, U512,
 };
 #[cfg(not(feature = "use-as-wasm"))]
 use casper_types::{
@@ -92,62 +90,18 @@ const NEW_OPCODE_COSTS: OpcodeCosts = OpcodeCosts {
     nop: 0,
     current_memory: 0,
     grow_memory: 0,
+    sign: 0,
 };
 
-static NEW_HOST_FUNCTION_COSTS: Lazy<HostFunctionCosts> = Lazy::new(|| HostFunctionCosts {
-    read_value: HostFunction::fixed(0),
-    dictionary_get: HostFunction::fixed(0),
-    write: HostFunction::fixed(0),
-    dictionary_put: HostFunction::fixed(0),
-    add: HostFunction::fixed(0),
-    new_uref: HostFunction::fixed(0),
-    load_named_keys: HostFunction::fixed(0),
-    ret: HostFunction::fixed(0),
-    get_key: HostFunction::fixed(0),
-    has_key: HostFunction::fixed(0),
-    put_key: HostFunction::fixed(0),
-    remove_key: HostFunction::fixed(0),
-    revert: HostFunction::fixed(0),
-    is_valid_uref: HostFunction::fixed(0),
-    add_associated_key: HostFunction::fixed(0),
-    remove_associated_key: HostFunction::fixed(0),
-    update_associated_key: HostFunction::fixed(0),
-    set_action_threshold: HostFunction::fixed(0),
-    get_caller: HostFunction::fixed(0),
-    get_blocktime: HostFunction::fixed(0),
-    create_purse: HostFunction::fixed(0),
-    transfer_to_account: HostFunction::fixed(0),
-    transfer_from_purse_to_account: HostFunction::fixed(0),
-    transfer_from_purse_to_purse: HostFunction::fixed(0),
-    get_balance: HostFunction::fixed(0),
-    get_phase: HostFunction::fixed(0),
-    get_system_contract: HostFunction::fixed(0),
-    get_main_purse: HostFunction::fixed(0),
-    read_host_buffer: HostFunction::fixed(0),
-    create_contract_package_at_hash: HostFunction::fixed(0),
-    create_contract_user_group: HostFunction::fixed(0),
-    add_contract_version: HostFunction::fixed(0),
-    disable_contract_version: HostFunction::fixed(0),
-    call_contract: HostFunction::fixed(0),
-    call_versioned_contract: HostFunction::fixed(0),
-    get_named_arg_size: HostFunction::fixed(0),
-    get_named_arg: HostFunction::fixed(0),
-    remove_contract_user_group: HostFunction::fixed(0),
-    provision_contract_user_group_uref: HostFunction::fixed(0),
-    remove_contract_user_group_urefs: HostFunction::fixed(0),
-    print: HostFunction::fixed(0),
-    blake2b: HostFunction::fixed(0),
-    random_bytes: HostFunction::fixed(0),
-    enable_contract_version: HostFunction::fixed(0),
-});
-static STORAGE_COSTS_ONLY: Lazy<WasmConfig> = Lazy::new(|| {
-    WasmConfig::new(
-        DEFAULT_WASM_MAX_MEMORY,
-        DEFAULT_MAX_STACK_HEIGHT,
+static NEW_HOST_FUNCTION_COSTS: Lazy<HostFunctionCosts> = Lazy::new(HostFunctionCosts::zero);
+static NO_COSTS_WASM_CONFIG: Lazy<WasmConfig> = Lazy::new(|| {
+    let wasm_v1_config = WasmV1Config::new(
+        DEFAULT_V1_WASM_MAX_MEMORY,
+        DEFAULT_V1_MAX_STACK_HEIGHT,
         NEW_OPCODE_COSTS,
-        StorageCosts::default(),
         *NEW_HOST_FUNCTION_COSTS,
-    )
+    );
+    WasmConfig::new(MessageLimits::default(), wasm_v1_config)
 });
 
 static NEW_PROTOCOL_VERSION: Lazy<ProtocolVersion> = Lazy::new(|| {
@@ -158,26 +112,41 @@ static NEW_PROTOCOL_VERSION: Lazy<ProtocolVersion> = Lazy::new(|| {
     )
 });
 
-fn initialize_isolated_storage_costs() -> InMemoryWasmTestBuilder {
+/*
+NOTE: in this test suite, to isolation specific micro function,
+we are using specific costs that are not indicative of production values
+
+Do not interpret statements in this test suite as global statements of fact
+rather, they are self-reflective.
+
+For instance, "should not charge for x" does not mean production usage would allow zero
+cost host interaction. It only means in this controlled setup we have isolated that value
+for fine grained testing.
+*/
+
+fn initialize_isolated_storage_costs() -> LmdbWasmTestBuilder {
     // This test runs a contract that's after every call extends the same key with
     // more data
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
     //
     // Isolate storage costs without host function costs, and without opcode costs
     //
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let mut upgrade_request = UpgradeRequestBuilder::new()
-        .with_current_protocol_version(*DEFAULT_PROTOCOL_VERSION)
+        .with_current_protocol_version(DEFAULT_PROTOCOL_VERSION)
         .with_new_protocol_version(*NEW_PROTOCOL_VERSION)
         .with_activation_point(DEFAULT_ACTIVATION_POINT)
         .build();
 
-    let new_engine_config = EngineConfigBuilder::default()
-        .with_wasm_config(*STORAGE_COSTS_ONLY)
-        .build();
+    let updated_chainspec = builder
+        .chainspec()
+        .clone()
+        .with_wasm_config(*NO_COSTS_WASM_CONFIG);
 
-    builder.upgrade_with_upgrade_request_and_config(Some(new_engine_config), &mut upgrade_request);
+    builder
+        .with_chainspec(updated_chainspec)
+        .upgrade(&mut upgrade_request);
 
     builder
 }
@@ -193,11 +162,10 @@ fn should_verify_isolate_host_side_payment_code_is_free() {
         DO_NOTHING_WASM,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
     let balance_before = builder.get_purse_balance(account.main_purse());
 
@@ -214,7 +182,7 @@ fn should_verify_isolate_host_side_payment_code_is_free() {
         balance_before - transaction_fee,
         "balance before and after should match"
     );
-    assert_eq!(builder.last_exec_gas_cost().value(), U512::zero());
+    assert_eq!(builder.last_exec_gas_consumed().value(), U512::zero());
 }
 
 #[cfg(not(feature = "use-as-wasm"))]
@@ -231,12 +199,11 @@ fn should_verify_isolated_auction_storage_is_free() {
         SYSTEM_CONTRACT_HASHES_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
     builder.exec(exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
     let bond_amount = U512::from(BOND_AMOUNT);
@@ -247,7 +214,7 @@ fn should_verify_isolated_auction_storage_is_free() {
             .named_keys()
             .get(AUCTION)
             .unwrap()
-            .into_hash()
+            .into_entity_hash_addr()
             .unwrap()
             .into(),
         auction::METHOD_ADD_BID,
@@ -257,7 +224,6 @@ fn should_verify_isolated_auction_storage_is_free() {
             auction::ARG_DELEGATION_RATE => DELEGATION_RATE,
         },
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     let balance_before = builder.get_purse_balance(account.main_purse());
@@ -279,7 +245,7 @@ fn should_verify_isolated_auction_storage_is_free() {
         expected - balance_after
     );
     assert_eq!(
-        builder.last_exec_gas_cost().value(),
+        builder.last_exec_gas_consumed().value(),
         U512::from(DEFAULT_ADD_BID_COST)
     );
 }
@@ -296,24 +262,22 @@ fn should_measure_gas_cost_for_storage_usage_write() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
-    assert!(!builder.last_exec_gas_cost().value().is_zero());
+    assert!(!builder.last_exec_gas_consumed().value().is_zero());
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     //
     // Measure  small write
@@ -328,7 +292,6 @@ fn should_measure_gas_cost_for_storage_usage_write() {
             WRITE_FUNCTION_SMALL_NAME,
             RuntimeArgs::default(),
         )
-        .with_protocol_version(*NEW_PROTOCOL_VERSION)
         .build();
 
         builder_a
@@ -336,7 +299,7 @@ fn should_measure_gas_cost_for_storage_usage_write() {
             .expect_success()
             .commit();
 
-        builder_a.last_exec_gas_cost()
+        builder_a.last_exec_gas_consumed()
     };
 
     let expected_small_write_data =
@@ -369,7 +332,6 @@ fn should_measure_gas_cost_for_storage_usage_write() {
             WRITE_FUNCTION_LARGE_NAME,
             RuntimeArgs::default(),
         )
-        .with_protocol_version(*NEW_PROTOCOL_VERSION)
         .build();
 
         builder_b
@@ -377,7 +339,7 @@ fn should_measure_gas_cost_for_storage_usage_write() {
             .expect_success()
             .commit();
 
-        builder_b.last_exec_gas_cost()
+        builder_b.last_exec_gas_consumed()
     };
 
     let expected_large_write_data =
@@ -403,8 +365,8 @@ fn should_measure_gas_cost_for_storage_usage_write() {
 fn should_measure_unisolated_gas_cost_for_storage_usage_write() {
     let cost_per_byte = U512::from(StorageCosts::default().gas_per_byte());
 
-    let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let install_exec_request = ExecuteRequestBuilder::standard(
         *DEFAULT_ACCOUNT_ADDR,
@@ -416,16 +378,15 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_write() {
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     //
     // Measure  small write
@@ -447,7 +408,7 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_write() {
             .expect_success()
             .commit();
 
-        builder_a.last_exec_gas_cost()
+        builder_a.last_exec_gas_consumed()
     };
 
     let expected_small_write_data =
@@ -487,7 +448,7 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_write() {
             .expect_success()
             .commit();
 
-        builder_b.last_exec_gas_cost()
+        builder_b.last_exec_gas_consumed()
     };
 
     let expected_large_write_data =
@@ -520,7 +481,6 @@ fn should_measure_gas_cost_for_storage_usage_add() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
@@ -528,16 +488,15 @@ fn should_measure_gas_cost_for_storage_usage_add() {
     // let mut builder_a = builder.clone();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     //
     // Measure small add
@@ -552,7 +511,6 @@ fn should_measure_gas_cost_for_storage_usage_add() {
             ADD_FUNCTION_SMALL_NAME,
             RuntimeArgs::default(),
         )
-        .with_protocol_version(*NEW_PROTOCOL_VERSION)
         .build();
 
         builder_a
@@ -560,7 +518,7 @@ fn should_measure_gas_cost_for_storage_usage_add() {
             .expect_success()
             .commit();
 
-        builder_a.last_exec_gas_cost()
+        builder_a.last_exec_gas_consumed()
     };
 
     let expected_small_add_data =
@@ -593,7 +551,6 @@ fn should_measure_gas_cost_for_storage_usage_add() {
             ADD_FUNCTION_LARGE_NAME,
             RuntimeArgs::default(),
         )
-        .with_protocol_version(*NEW_PROTOCOL_VERSION)
         .build();
 
         builder_b
@@ -601,7 +558,7 @@ fn should_measure_gas_cost_for_storage_usage_add() {
             .expect_success()
             .commit();
 
-        builder_b.last_exec_gas_cost()
+        builder_b.last_exec_gas_consumed()
     };
 
     let expected_large_write_data =
@@ -629,8 +586,8 @@ fn should_measure_gas_cost_for_storage_usage_add() {
 fn should_measure_unisolated_gas_cost_for_storage_usage_add() {
     let cost_per_byte = U512::from(StorageCosts::default().gas_per_byte());
 
-    let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let install_exec_request = ExecuteRequestBuilder::standard(
         *DEFAULT_ACCOUNT_ADDR,
@@ -641,19 +598,16 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_add() {
 
     builder.exec(install_exec_request).expect_success().commit();
 
-    // let mut builder_a = builder.clone();
-
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     //
     // Measure small add
@@ -675,7 +629,7 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_add() {
             .expect_success()
             .commit();
 
-        builder_a.last_exec_gas_cost()
+        builder_a.last_exec_gas_consumed()
     };
 
     let expected_small_add_data =
@@ -715,7 +669,7 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_add() {
             .expect_success()
             .commit();
 
-        builder_b.last_exec_gas_cost()
+        builder_b.last_exec_gas_consumed()
     };
 
     let expected_large_write_data =
@@ -740,7 +694,7 @@ fn should_measure_unisolated_gas_cost_for_storage_usage_add() {
 
 #[ignore]
 #[test]
-fn should_verify_new_uref_is_charging_for_storage() {
+fn should_verify_new_uref_storage_cost() {
     let mut builder = initialize_isolated_storage_costs();
 
     let install_exec_request = ExecuteRequestBuilder::standard(
@@ -748,24 +702,20 @@ fn should_verify_new_uref_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -773,14 +723,18 @@ fn should_verify_new_uref_is_charging_for_storage() {
         NEW_UREF_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
+    assert_eq!(
+        // should charge for storage of a u64 behind a URef
+        builder.last_exec_gas_consumed(),
+        StorageCosts::default().calculate_gas_cost(
+            StoredValue::CLValue(CLValue::from_t(0u64).expect("should create CLValue"))
+                .serialized_length()
+        )
+    )
 }
 
 #[ignore]
@@ -793,24 +747,20 @@ fn should_verify_put_key_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -818,19 +768,25 @@ fn should_verify_put_key_is_charging_for_storage() {
         PUT_KEY_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
+    assert_eq!(
+        // should charge for storage of a named key
+        builder.last_exec_gas_consumed(),
+        StorageCosts::default().calculate_gas_cost(
+            StoredValue::CLValue(
+                CLValue::from_t(("new_key".to_string(), Key::Hash([0u8; 32]))).unwrap()
+            )
+            .serialized_length()
+        ),
+    )
 }
 
 #[ignore]
 #[test]
-fn should_verify_remove_key_is_charging_for_storage() {
+fn should_verify_remove_key_is_not_charging_for_storage() {
     let mut builder = initialize_isolated_storage_costs();
 
     let install_exec_request = ExecuteRequestBuilder::standard(
@@ -838,24 +794,20 @@ fn should_verify_remove_key_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -863,14 +815,19 @@ fn should_verify_remove_key_is_charging_for_storage() {
         REMOVE_KEY_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
+    if builder.chainspec().core_config.enable_addressable_entity {
+        assert_eq!(
+            // should charge zero, because we do not charge for storage when removing a key
+            builder.last_exec_gas_consumed(),
+            StorageCosts::default().calculate_gas_cost(0),
+        )
+    } else {
+        assert!(builder.last_exec_gas_consumed() > Gas::zero())
+    }
 }
 
 #[ignore]
@@ -883,24 +840,20 @@ fn should_verify_create_contract_at_hash_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -908,14 +861,18 @@ fn should_verify_create_contract_at_hash_is_charging_for_storage() {
         CREATE_CONTRACT_PACKAGE_AT_HASH_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
+    assert_eq!(
+        // should charge at least enough for storage of a package and unit CLValue (for a URef)
+        builder.last_exec_gas_consumed(),
+        StorageCosts::default().calculate_gas_cost(
+            StoredValue::ContractPackage(ContractPackage::default()).serialized_length()
+                + StoredValue::CLValue(CLValue::unit()).serialized_length()
+        )
+    )
 }
 
 #[ignore]
@@ -928,24 +885,20 @@ fn should_verify_create_contract_user_group_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -953,16 +906,30 @@ fn should_verify_create_contract_user_group_is_charging_for_storage() {
         CREATE_CONTRACT_USER_GROUP_FUNCTION_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
+    let mut groups = Groups::new();
+    groups.insert(Group::new("Label"), BTreeSet::new());
 
-    assert!(balance_after < balance_before);
+    let mut package = ContractPackage::new(
+        URef::default(),
+        [(ContractVersionKey::new(2, 1), ContractHash::new([0u8; 32]))]
+            .iter()
+            .cloned()
+            .collect::<BTreeMap<_, _>>(),
+        Default::default(),
+        groups,
+        Default::default(),
+    );
 
-    let balance_before = balance_after;
+    assert_eq!(
+        // should charge for storage of the new package
+        builder.last_exec_gas_consumed(),
+        StorageCosts::default()
+            .calculate_gas_cost(StoredValue::ContractPackage(package.clone()).serialized_length()),
+    );
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -970,16 +937,20 @@ fn should_verify_create_contract_user_group_is_charging_for_storage() {
         PROVISION_UREFS_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
+    package
+        .groups_mut()
+        .get_mut(&Group::new("Label"))
+        .unwrap()
+        .insert(URef::new([0u8; 32], Default::default()));
 
-    assert!(balance_after < balance_before);
-
-    let balance_before = balance_after;
+    assert!(
+        // should charge for storage of the new package and a unit CLValue (for a URef)
+        builder.last_exec_gas_consumed() > Gas::zero()
+    );
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -987,14 +958,16 @@ fn should_verify_create_contract_user_group_is_charging_for_storage() {
         REMOVE_CONTRACT_USER_GROUP_FUNCTION,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
+    package.remove_group(&Group::new("Label"));
 
-    assert!(balance_after < balance_before);
+    assert!(
+        // should charge for storage of the new package
+        builder.last_exec_gas_consumed() > Gas::zero()
+    )
 }
 
 #[ignore]
@@ -1007,24 +980,20 @@ fn should_verify_subcall_new_uref_is_charging_for_storage() {
         STORAGE_COSTS_NAME,
         RuntimeArgs::default(),
     )
-    .with_protocol_version(*NEW_PROTOCOL_VERSION)
     .build();
 
     builder.exec(install_exec_request).expect_success().commit();
 
     let account = builder
-        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
 
-    let balance_before = builder.get_purse_balance(account.main_purse());
-
-    let contract_hash: ContractHash = account
+    let contract_hash: AddressableEntityHash = account
         .named_keys()
         .get(CONTRACT_KEY_NAME)
         .expect("contract hash")
-        .into_hash()
-        .expect("should be hash")
-        .into();
+        .into_entity_hash()
+        .expect("should be hash");
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -1036,12 +1005,6 @@ fn should_verify_subcall_new_uref_is_charging_for_storage() {
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
-
-    let balance_before = balance_after;
-
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
         contract_hash,
@@ -1051,12 +1014,6 @@ fn should_verify_subcall_new_uref_is_charging_for_storage() {
     .build();
 
     builder.exec(exec_request).expect_success().commit();
-
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
-
-    let balance_before = balance_after;
 
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
@@ -1068,7 +1025,12 @@ fn should_verify_subcall_new_uref_is_charging_for_storage() {
 
     builder.exec(exec_request).expect_success().commit();
 
-    let balance_after = builder.get_purse_balance(account.main_purse());
-
-    assert!(balance_after < balance_before);
+    assert_eq!(
+        // should charge for storage of a u64 behind a URef
+        builder.last_exec_gas_consumed(),
+        StorageCosts::default().calculate_gas_cost(
+            StoredValue::CLValue(CLValue::from_t(0u64).expect("should create CLValue"))
+                .serialized_length()
+        )
+    )
 }

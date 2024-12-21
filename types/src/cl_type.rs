@@ -1,13 +1,13 @@
-// TODO - remove once schemars stops causing warning.
-#![allow(clippy::field_reassign_with_default)]
-
 use alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet, VecDeque},
     string::String,
     vec::Vec,
 };
-use core::mem;
+use core::{
+    fmt::{self, Display, Formatter},
+    mem,
+};
 
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
@@ -150,6 +150,14 @@ impl CLType {
     pub fn is_option(&self) -> bool {
         matches!(self, Self::Option(..))
     }
+
+    /// Creates a `CLType::Map`.
+    pub fn map(key: CLType, value: CLType) -> Self {
+        CLType::Map {
+            key: Box::new(key),
+            value: Box::new(value),
+        }
+    }
 }
 
 /// Returns the `CLType` describing a "named key" on the system, i.e. a `(String, Key)`.
@@ -208,6 +216,36 @@ impl CLType {
             CLType::Any => stream.push(CL_TYPE_TAG_ANY),
         }
         Ok(())
+    }
+}
+
+impl Display for CLType {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            CLType::Bool => write!(formatter, "bool"),
+            CLType::I32 => write!(formatter, "i32"),
+            CLType::I64 => write!(formatter, "i64"),
+            CLType::U8 => write!(formatter, "u8"),
+            CLType::U32 => write!(formatter, "u32"),
+            CLType::U64 => write!(formatter, "u64"),
+            CLType::U128 => write!(formatter, "u128"),
+            CLType::U256 => write!(formatter, "u256"),
+            CLType::U512 => write!(formatter, "u512"),
+            CLType::Unit => write!(formatter, "unit"),
+            CLType::String => write!(formatter, "string"),
+            CLType::Key => write!(formatter, "key"),
+            CLType::URef => write!(formatter, "uref"),
+            CLType::PublicKey => write!(formatter, "public-key"),
+            CLType::Option(t) => write!(formatter, "option<{t}>"),
+            CLType::List(t) => write!(formatter, "list<{t}>"),
+            CLType::ByteArray(len) => write!(formatter, "byte-array[{len}]"),
+            CLType::Result { ok, err } => write!(formatter, "result<{ok}, {err}>"),
+            CLType::Map { key, value } => write!(formatter, "map<{key}, {value}>"),
+            CLType::Tuple1([t1]) => write!(formatter, "({t1},)"),
+            CLType::Tuple2([t1, t2]) => write!(formatter, "({t1}, {t2})"),
+            CLType::Tuple3([t1, t2, t3]) => write!(formatter, "({t1}, {t2}, {t3})"),
+            CLType::Any => write!(formatter, "any"),
+        }
     }
 }
 
@@ -514,15 +552,15 @@ mod tests {
         AccessRights, CLValue,
     };
 
-    fn round_trip<T: CLTyped + FromBytes + ToBytes + PartialEq + Debug + Clone>(value: &T) {
-        let cl_value = CLValue::from_t(value.clone()).unwrap();
+    fn round_trip<T: CLTyped + FromBytes + ToBytes + PartialEq + Debug>(value: &T) {
+        let cl_value = CLValue::from_t(value).unwrap();
 
         let serialized_cl_value = cl_value.to_bytes().unwrap();
         assert_eq!(serialized_cl_value.len(), cl_value.serialized_length());
         let parsed_cl_value: CLValue = bytesrepr::deserialize(serialized_cl_value).unwrap();
         assert_eq!(cl_value, parsed_cl_value);
 
-        let parsed_value = CLValue::into_t(cl_value).unwrap();
+        let parsed_value = cl_value.into_t().unwrap();
         assert_eq!(*value, parsed_value);
     }
 

@@ -1,6 +1,3 @@
-// TODO - remove once schemars stops causing warning.
-#![allow(clippy::field_reassign_with_default)]
-
 use alloc::{boxed::Box, vec::Vec};
 
 #[cfg(feature = "datasize")]
@@ -11,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     bytesrepr::{self, FromBytes, ToBytes},
+    system::auction::DelegatorKind,
     CLType, CLTyped, PublicKey, U512,
 };
 
@@ -33,7 +31,7 @@ pub enum SeigniorageAllocation {
     /// Info about a seigniorage allocation for a delegator
     Delegator {
         /// Delegator's public key
-        delegator_public_key: PublicKey,
+        delegator_kind: DelegatorKind,
         /// Validator's public key
         validator_public_key: PublicKey,
         /// Allocated amount
@@ -52,12 +50,12 @@ impl SeigniorageAllocation {
 
     /// Constructs a [`SeigniorageAllocation::Delegator`]
     pub const fn delegator(
-        delegator_public_key: PublicKey,
+        delegator_kind: DelegatorKind,
         validator_public_key: PublicKey,
         amount: U512,
     ) -> Self {
         SeigniorageAllocation::Delegator {
-            delegator_public_key,
+            delegator_kind,
             validator_public_key,
             amount,
         }
@@ -94,11 +92,11 @@ impl ToBytes for SeigniorageAllocation {
                     amount,
                 } => validator_public_key.serialized_length() + amount.serialized_length(),
                 SeigniorageAllocation::Delegator {
-                    delegator_public_key,
+                    delegator_kind,
                     validator_public_key,
                     amount,
                 } => {
-                    delegator_public_key.serialized_length()
+                    delegator_kind.serialized_length()
                         + validator_public_key.serialized_length()
                         + amount.serialized_length()
                 }
@@ -116,11 +114,11 @@ impl ToBytes for SeigniorageAllocation {
                 amount.write_bytes(writer)?;
             }
             SeigniorageAllocation::Delegator {
-                delegator_public_key,
+                delegator_kind,
                 validator_public_key,
                 amount,
             } => {
-                delegator_public_key.write_bytes(writer)?;
+                delegator_kind.write_bytes(writer)?;
                 validator_public_key.write_bytes(writer)?;
                 amount.write_bytes(writer)?;
             }
@@ -142,15 +140,11 @@ impl FromBytes for SeigniorageAllocation {
                 ))
             }
             SEIGNIORAGE_ALLOCATION_DELEGATOR_TAG => {
-                let (delegator_public_key, rem) = PublicKey::from_bytes(rem)?;
+                let (delegator_kind, rem) = DelegatorKind::from_bytes(rem)?;
                 let (validator_public_key, rem) = PublicKey::from_bytes(rem)?;
                 let (amount, rem) = U512::from_bytes(rem)?;
                 Ok((
-                    SeigniorageAllocation::delegator(
-                        delegator_public_key,
-                        validator_public_key,
-                        amount,
-                    ),
+                    SeigniorageAllocation::delegator(delegator_kind, validator_public_key, amount),
                     rem,
                 ))
             }
@@ -198,7 +192,7 @@ impl EraInfo {
     /// * If the match candidate is a validator allocation, the provided public key is matched
     ///   against the validator public key.
     /// * If the match candidate is a delegator allocation, the provided public key is matched
-    ///   against the delegator public key.
+    ///   against the delegator public key if any.
     pub fn select(&self, public_key: PublicKey) -> impl Iterator<Item = &SeigniorageAllocation> {
         self.seigniorage_allocations
             .iter()
@@ -207,10 +201,13 @@ impl EraInfo {
                     validator_public_key,
                     ..
                 } => public_key == *validator_public_key,
-                SeigniorageAllocation::Delegator {
-                    delegator_public_key,
-                    ..
-                } => public_key == *delegator_public_key,
+                SeigniorageAllocation::Delegator { delegator_kind, .. } => {
+                    if let DelegatorKind::PublicKey(delegator_public_key) = delegator_kind {
+                        public_key == *delegator_public_key
+                    } else {
+                        false
+                    }
+                }
             })
     }
 }
@@ -261,7 +258,7 @@ pub mod gens {
 
     use crate::{
         crypto::gens::public_key_arb,
-        gens::u512_arb,
+        gens::{delegator_kind_arb, u512_arb},
         system::auction::{EraInfo, SeigniorageAllocation},
     };
 
@@ -272,14 +269,14 @@ pub mod gens {
     }
 
     fn seigniorage_allocation_delegator_arb() -> impl Strategy<Value = SeigniorageAllocation> {
-        (public_key_arb(), public_key_arb(), u512_arb()).prop_map(
-            |(delegator_public_key, validator_public_key, amount)| {
-                SeigniorageAllocation::delegator(delegator_public_key, validator_public_key, amount)
+        (delegator_kind_arb(), public_key_arb(), u512_arb()).prop_map(
+            |(delegator_kind, validator_public_key, amount)| {
+                SeigniorageAllocation::delegator(delegator_kind, validator_public_key, amount)
             },
         )
     }
 
-    /// Creates an arbitrary [`SeignorageAllocation`](crate::system::auction::SeigniorageAllocation)
+    /// Creates an arbitrary [`SeignorageAllocation`](SeigniorageAllocation)
     pub fn seigniorage_allocation_arb() -> impl Strategy<Value = SeigniorageAllocation> {
         prop_oneof![
             seigniorage_allocation_validator_arb(),

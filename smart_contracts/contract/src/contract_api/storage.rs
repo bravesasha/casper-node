@@ -1,14 +1,22 @@
 //! Functions for accessing and mutating local and global state.
 
-use alloc::{collections::BTreeSet, string::String, vec, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 use core::{convert::From, mem::MaybeUninit};
 
 use casper_types::{
+    addressable_entity::EntryPoints,
     api_error,
     bytesrepr::{self, FromBytes, ToBytes},
-    contracts::{ContractVersion, EntryPoints, NamedKeys},
-    AccessRights, ApiError, CLTyped, CLValue, ContractHash, ContractPackageHash, HashAddr, Key,
-    URef, DICTIONARY_ITEM_KEY_MAX_LENGTH, UREF_SERIALIZED_LENGTH,
+    contract_messages::MessageTopicOperation,
+    contracts::{ContractHash, ContractPackageHash, ContractVersion, NamedKeys},
+    AccessRights, ApiError, CLTyped, CLValue, EntityVersion, HashAddr, Key, URef,
+    DICTIONARY_ITEM_KEY_MAX_LENGTH, UREF_SERIALIZED_LENGTH,
 };
 
 use crate::{
@@ -94,30 +102,52 @@ pub fn new_uref<T: CLTyped + ToBytes>(init: T) -> URef {
 /// Create a new contract stored under a Key::Hash at version 1. You may upgrade this contract in
 /// the future; if you want a contract that is locked (i.e. cannot be upgraded) call
 /// `new_locked_contract` instead.
-/// if `named_keys` are provided, will apply them
-/// if `hash_name` is provided, puts contract hash in current context's named keys under `hash_name`
-/// if `uref_name` is provided, puts access_uref in current context's named keys under `uref_name`
+/// if `named_keys` is provided, puts all of the included named keys into the newly created
+///     contract version's named keys.
+/// if `hash_name` is provided, puts Key::Hash(contract_package_hash) into the
+///     installing account's named keys under `hash_name`.
+/// if `uref_name` is provided, puts Key::URef(access_uref) into the installing account's named
+///     keys under `uref_name`
 pub fn new_contract(
     entry_points: EntryPoints,
     named_keys: Option<NamedKeys>,
     hash_name: Option<String>,
     uref_name: Option<String>,
-) -> (ContractHash, ContractVersion) {
-    create_contract(entry_points, named_keys, hash_name, uref_name, false)
+    message_topics: Option<BTreeMap<String, MessageTopicOperation>>,
+) -> (ContractHash, EntityVersion) {
+    create_contract(
+        entry_points,
+        named_keys,
+        hash_name,
+        uref_name,
+        message_topics,
+        false,
+    )
 }
 
 /// Create a locked contract stored under a Key::Hash, which can never be upgraded. This is an
 /// irreversible decision; for a contract that can be upgraded use `new_contract` instead.
-/// if `named_keys` are provided, will apply them
-/// if `hash_name` is provided, puts contract hash in current context's named keys under `hash_name`
-/// if `uref_name` is provided, puts access_uref in current context's named keys under `uref_name`
+/// if `named_keys` is provided, puts all of the included named keys into the newly created
+///     contract version's named keys.
+/// if `hash_name` is provided, puts Key::Hash(contract_package_hash) into the
+///     installing account's named keys under `hash_name`.
+/// if `uref_name` is provided, puts Key::URef(access_uref) into the installing account's named
+///     keys under `uref_name`
 pub fn new_locked_contract(
     entry_points: EntryPoints,
     named_keys: Option<NamedKeys>,
     hash_name: Option<String>,
     uref_name: Option<String>,
-) -> (ContractHash, ContractVersion) {
-    create_contract(entry_points, named_keys, hash_name, uref_name, true)
+    message_topics: Option<BTreeMap<String, MessageTopicOperation>>,
+) -> (ContractHash, EntityVersion) {
+    create_contract(
+        entry_points,
+        named_keys,
+        hash_name,
+        uref_name,
+        message_topics,
+        true,
+    )
 }
 
 fn create_contract(
@@ -125,24 +155,29 @@ fn create_contract(
     named_keys: Option<NamedKeys>,
     hash_name: Option<String>,
     uref_name: Option<String>,
+    message_topics: Option<BTreeMap<String, MessageTopicOperation>>,
     is_locked: bool,
-) -> (ContractHash, ContractVersion) {
+) -> (ContractHash, EntityVersion) {
     let (contract_package_hash, access_uref) = create_contract_package(is_locked);
 
     if let Some(hash_name) = hash_name {
-        runtime::put_key(&hash_name, contract_package_hash.into());
+        runtime::put_key(&hash_name, Key::Hash(contract_package_hash.value()));
     };
 
     if let Some(uref_name) = uref_name {
         runtime::put_key(&uref_name, access_uref.into());
     };
 
-    let named_keys = match named_keys {
-        Some(named_keys) => named_keys,
-        None => NamedKeys::new(),
-    };
+    let named_keys = named_keys.unwrap_or_default();
 
-    add_contract_version(contract_package_hash, entry_points, named_keys)
+    let message_topics = message_topics.unwrap_or_default();
+
+    add_contract_version(
+        contract_package_hash,
+        entry_points,
+        named_keys,
+        message_topics,
+    )
 }
 
 /// Create a new (versioned) contract stored under a Key::Hash. Initially there
@@ -276,51 +311,69 @@ pub fn remove_contract_user_group(
     api_error::result_from(ret)
 }
 
-/// Add a new version of a contract to the contract stored at the given
-/// `Key`. Note that this contract must have been created by
-/// `create_contract` or `create_contract_package_at_hash` first.
+/// Add version to existing Package.
 pub fn add_contract_version(
-    contract_package_hash: ContractPackageHash,
+    package_hash: ContractPackageHash,
     entry_points: EntryPoints,
     named_keys: NamedKeys,
-) -> (ContractHash, ContractVersion) {
-    let (contract_package_hash_ptr, contract_package_hash_size, _bytes1) =
-        contract_api::to_ptr(contract_package_hash);
-    let (entry_points_ptr, entry_points_size, _bytes4) = contract_api::to_ptr(entry_points);
-    let (named_keys_ptr, named_keys_size, _bytes5) = contract_api::to_ptr(named_keys);
+    message_topics: BTreeMap<String, MessageTopicOperation>,
+) -> (ContractHash, EntityVersion) {
+    // Retain the underscore as Wasm transpiliation requires it.
+    let (package_hash_ptr, package_hash_size, _package_hash_bytes) =
+        contract_api::to_ptr(package_hash);
+    let (entry_points_ptr, entry_points_size, _entry_point_bytes) =
+        contract_api::to_ptr(entry_points);
+    let (named_keys_ptr, named_keys_size, _named_keys_bytes) = contract_api::to_ptr(named_keys);
+    let (message_topics_ptr, message_topics_size, _message_topics) =
+        contract_api::to_ptr(message_topics);
 
-    let mut output_ptr = vec![0u8; Key::max_serialized_length()];
-    let mut total_bytes: usize = 0;
+    let mut output_ptr = vec![0u8; 32];
+    // let mut total_bytes: usize = 0;
 
-    let mut contract_version: ContractVersion = 0;
+    let mut entity_version: ContractVersion = 0;
 
     let ret = unsafe {
-        ext_ffi::casper_add_contract_version(
-            contract_package_hash_ptr,
-            contract_package_hash_size,
-            &mut contract_version as *mut ContractVersion,
+        ext_ffi::casper_add_contract_version_with_message_topics(
+            package_hash_ptr,
+            package_hash_size,
+            &mut entity_version as *mut ContractVersion, // Fixed width
             entry_points_ptr,
             entry_points_size,
             named_keys_ptr,
             named_keys_size,
+            message_topics_ptr,
+            message_topics_size,
             output_ptr.as_mut_ptr(),
             output_ptr.len(),
-            &mut total_bytes as *mut usize,
+            // &mut total_bytes as *mut usize,
         )
     };
     match api_error::result_from(ret) {
         Ok(_) => {}
         Err(e) => revert(e),
     }
-    output_ptr.truncate(total_bytes);
-    let contract_hash = bytesrepr::deserialize(output_ptr).unwrap_or_revert();
-    (contract_hash, contract_version)
+    // output_ptr.truncate(32usize);
+    let entity_hash: ContractHash = match bytesrepr::deserialize(output_ptr) {
+        Ok(hash) => hash,
+        Err(err) => panic!("{}", format!("{:?}", err)),
+    };
+    (entity_hash, entity_version)
 }
 
-/// Disable a version of a contract from the contract stored at the given
-/// `Key`. That version of the contract will no longer be callable by
-/// `call_versioned_contract`. Note that this contract must have been created by
-/// `create_contract` or `create_contract_package_at_hash` first.
+/// Disables a specific version of a contract within the contract package identified by
+/// `contract_package_hash`. Once disabled, the specified version will no longer be
+/// callable by `call_versioned_contract`. Please note that the contract must have been
+/// previously created using `create_contract` or `create_contract_package_at_hash`.
+///
+/// # Arguments
+///
+/// * `contract_package_hash` - The hash of the contract package containing the version to be
+///   disabled.
+/// * `contract_hash` - The hash of the specific contract version to be disabled.
+///
+/// # Errors
+///
+/// Returns a `Result` indicating success or an `ApiError` if the operation fails.
 pub fn disable_contract_version(
     contract_package_hash: ContractPackageHash,
     contract_hash: ContractHash,
@@ -341,10 +394,17 @@ pub fn disable_contract_version(
     api_error::result_from(result)
 }
 
-/// Enable a version of a contract from the contract stored at the given hash.
-/// That version of the contract will no longer be callable by
-/// `call_versioned_contract`. Note that this contract must have been created by
-/// [`new_contract`] or [`create_contract_package_at_hash`] first.
+/// Enables a specific version of a contract from the contract package stored at the given hash.
+/// Once enabled, that version of the contract becomes callable again by `call_versioned_contract`.
+///
+/// # Arguments
+///
+/// * `contract_package_hash` - The hash of the contract package containing the desired version.
+/// * `contract_hash` - The hash of the specific contract version to be enabled.
+///
+/// # Errors
+///
+/// Returns a `Result` indicating success or an `ApiError` if the operation fails.
 pub fn enable_contract_version(
     contract_package_hash: ContractPackageHash,
     contract_hash: ContractHash,

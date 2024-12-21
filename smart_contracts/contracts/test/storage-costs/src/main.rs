@@ -3,15 +3,15 @@
 
 extern crate alloc;
 
-use alloc::{string::ToString, vec::Vec};
+use alloc::{collections::BTreeMap, string::ToString, vec::Vec};
 
 use casper_contract::{
     contract_api::{runtime, storage},
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, CLType, EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Key,
-    U512,
+    contracts::NamedKeys, CLType, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType,
+    EntryPoints, Key, U512,
 };
 
 const WRITE_FUNCTION_SMALL_NAME: &str = "write_function_small";
@@ -25,7 +25,7 @@ const WRITE_LARGE_VALUE: &[u8] = b"111111111111111111111111111111111111111111111
 const HASH_KEY_NAME: &str = "contract_package";
 const CONTRACT_KEY_NAME: &str = "contract";
 const ADD_SMALL_VALUE: u64 = 1;
-const ADD_LARGE_VALUE: u64 = u64::max_value();
+const ADD_LARGE_VALUE: u64 = u64::MAX;
 const NEW_UREF_FUNCTION: &str = "new_uref_function";
 const PUT_KEY_FUNCTION: &str = "put_key_function";
 const REMOVE_KEY_FUNCTION: &str = "remove_key_function";
@@ -93,11 +93,10 @@ pub extern "C" fn create_contract_package_at_hash_function() {
 #[no_mangle]
 pub extern "C" fn create_contract_user_group_function() {
     let contract_package_hash = runtime::get_key(CONTRACT_KEY_NAME)
-        .and_then(Key::into_hash)
-        .expect("should have package hash")
-        .into();
+        .and_then(Key::into_package_hash)
+        .expect("should have package hash");
     let _result = storage::create_contract_user_group(
-        contract_package_hash,
+        contract_package_hash.into(),
         LABEL_NAME,
         0,
         Default::default(),
@@ -108,30 +107,29 @@ pub extern "C" fn create_contract_user_group_function() {
 #[no_mangle]
 pub extern "C" fn provision_urefs_function() {
     let contract_package_hash = runtime::get_key(CONTRACT_KEY_NAME)
-        .and_then(Key::into_hash)
-        .expect("should have package hash")
-        .into();
-    let _result = storage::provision_contract_user_group_uref(contract_package_hash, LABEL_NAME)
-        .unwrap_or_revert();
+        .and_then(Key::into_package_hash)
+        .expect("should have package hash");
+    let _result =
+        storage::provision_contract_user_group_uref(contract_package_hash.into(), LABEL_NAME)
+            .unwrap_or_revert();
 }
 
 #[no_mangle]
 pub extern "C" fn remove_contract_user_group_function() {
     let contract_package_hash = runtime::get_key(CONTRACT_KEY_NAME)
-        .and_then(Key::into_hash)
-        .expect("should have package hash")
-        .into();
-    storage::remove_contract_user_group(contract_package_hash, LABEL_NAME).unwrap_or_revert();
+        .and_then(Key::into_package_hash)
+        .expect("should have package hash");
+    storage::remove_contract_user_group(contract_package_hash.into(), LABEL_NAME)
+        .unwrap_or_revert();
 }
 
 #[no_mangle]
 pub extern "C" fn new_uref_subcall() {
     let contract_package_hash = runtime::get_key(CONTRACT_KEY_NAME)
-        .and_then(Key::into_hash)
-        .expect("should have package hash")
-        .into();
+        .and_then(Key::into_package_hash)
+        .expect("should have package hash");
     runtime::call_versioned_contract(
-        contract_package_hash,
+        contract_package_hash.into(),
         None,
         NEW_UREF_FUNCTION,
         Default::default(),
@@ -147,7 +145,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
         let entry_point = EntryPoint::new(
@@ -155,7 +154,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
         let entry_point = EntryPoint::new(
@@ -163,7 +163,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
         let entry_point = EntryPoint::new(
@@ -171,7 +172,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -180,7 +182,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -189,7 +192,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -198,7 +202,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -207,7 +212,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -216,7 +222,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -225,7 +232,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -234,7 +242,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -243,7 +252,8 @@ pub extern "C" fn call() {
             Vec::new(),
             CLType::Unit,
             EntryPointAccess::Public,
-            EntryPointType::Contract,
+            EntryPointType::Called,
+            EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
 
@@ -264,15 +274,19 @@ pub extern "C" fn call() {
 
         named_keys.insert(
             CONTRACT_KEY_NAME.to_string(),
-            Key::Hash(contract_package_hash.value()),
+            Key::SmartContract(contract_package_hash.value()),
         );
         named_keys.insert(ACCESS_KEY_NAME.to_string(), access_uref.into());
 
         named_keys
     };
 
-    let (contract_hash, _version) =
-        storage::add_contract_version(contract_package_hash, entry_points, named_keys);
-    runtime::put_key(CONTRACT_KEY_NAME, contract_hash.into());
+    let (contract_hash, _version) = storage::add_contract_version(
+        contract_package_hash,
+        entry_points,
+        named_keys,
+        BTreeMap::new(),
+    );
+    runtime::put_key(CONTRACT_KEY_NAME, Key::Hash(contract_hash.value()));
     runtime::put_key(ACCESS_KEY_NAME, access_uref.into());
 }

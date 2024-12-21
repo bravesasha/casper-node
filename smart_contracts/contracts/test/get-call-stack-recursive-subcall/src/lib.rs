@@ -11,8 +11,9 @@ use casper_contract::{
 use casper_types::{
     bytesrepr,
     bytesrepr::{Error, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
-    runtime_args, ApiError, CLType, CLTyped, ContractHash, ContractPackageHash, EntryPointType,
-    Key, Phase, RuntimeArgs, Tagged, URef, U512,
+    contracts::{ContractHash, ContractPackageHash},
+    runtime_args, ApiError, CLType, CLTyped, EntryPointType, Key, Phase, RuntimeArgs, Tagged, URef,
+    U512,
 };
 
 pub const CONTRACT_PACKAGE_NAME: &str = "forwarder";

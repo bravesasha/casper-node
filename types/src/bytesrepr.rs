@@ -15,11 +15,15 @@ use core::{
     fmt::{self, Display, Formatter},
     mem,
 };
+#[cfg(feature = "std")]
+use std::error::Error as StdError;
 
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
 use num_integer::Integer;
 use num_rational::Ratio;
+#[cfg(feature = "json-schema")]
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub use bytes::Bytes;
@@ -97,18 +101,29 @@ pub fn unchecked_allocate_buffer<T: ToBytes>(to_be_serialized: &T) -> Vec<u8> {
 }
 
 /// Returns a `Vec<u8>` initialized with sufficient capacity to hold `to_be_serialized` after
-/// serialization, or an error if the capacity would exceed `u32::max_value()`.
+/// serialization, or an error if the capacity would exceed `u32::MAX`.
 pub fn allocate_buffer<T: ToBytes>(to_be_serialized: &T) -> Result<Vec<u8>, Error> {
     let serialized_length = to_be_serialized.serialized_length();
-    if serialized_length > u32::max_value() as usize {
+    allocate_buffer_for_size(serialized_length)
+}
+
+/// Returns a `Vec<u8>` initialized with sufficient capacity to hold `expected_size` bytes,
+/// or an error if the capacity would exceed `u32::max_value()`.
+pub fn allocate_buffer_for_size(expected_size: usize) -> Result<Vec<u8>, Error> {
+    if expected_size > u32::MAX as usize {
         return Err(Error::OutOfMemory);
     }
-    Ok(Vec::with_capacity(serialized_length))
+    Ok(Vec::with_capacity(expected_size))
 }
 
 /// Serialization and deserialization errors.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Copy, Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
+#[cfg_attr(
+    feature = "json-schema",
+    derive(JsonSchema),
+    schemars(rename = "BytesreprError")
+)]
 #[repr(u8)]
 #[non_exhaustive]
 pub enum Error {
@@ -142,6 +157,44 @@ impl Display for Error {
         }
     }
 }
+
+impl ToBytes for Error {
+    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        (*self as u8).to_bytes()
+    }
+
+    fn serialized_length(&self) -> usize {
+        U8_SERIALIZED_LENGTH
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), Error> {
+        (*self as u8).write_bytes(writer)
+    }
+}
+
+impl FromBytes for Error {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (value, remainder) = u8::from_bytes(bytes)?;
+        match value {
+            value if value == Error::EarlyEndOfStream as u8 => {
+                Ok((Error::EarlyEndOfStream, remainder))
+            }
+            value if value == Error::Formatting as u8 => Ok((Error::Formatting, remainder)),
+            value if value == Error::LeftOverBytes as u8 => Ok((Error::LeftOverBytes, remainder)),
+            value if value == Error::OutOfMemory as u8 => Ok((Error::OutOfMemory, remainder)),
+            value if value == Error::NotRepresentable as u8 => {
+                Ok((Error::NotRepresentable, remainder))
+            }
+            value if value == Error::ExceededRecursionDepth as u8 => {
+                Ok((Error::ExceededRecursionDepth, remainder))
+            }
+            _ => Err(Error::Formatting),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl StdError for Error {}
 
 /// Deserializes `bytes` into an instance of `T`.
 ///
@@ -371,6 +424,30 @@ impl FromBytes for u64 {
     }
 }
 
+impl ToBytes for u128 {
+    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.to_le_bytes().to_vec())
+    }
+
+    fn serialized_length(&self) -> usize {
+        U128_SERIALIZED_LENGTH
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), Error> {
+        writer.extend_from_slice(&self.to_le_bytes());
+        Ok(())
+    }
+}
+
+impl FromBytes for u128 {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let mut result = [0u8; U128_SERIALIZED_LENGTH];
+        let (bytes, remainder) = safe_split_at(bytes, U128_SERIALIZED_LENGTH)?;
+        result.copy_from_slice(bytes);
+        Ok((<u128>::from_le_bytes(result), remainder))
+    }
+}
+
 impl ToBytes for String {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let bytes = self.as_bytes();
@@ -401,7 +478,7 @@ fn ensure_efficient_serialization<T>() {
     debug_assert_ne!(
         any::type_name::<T>(),
         any::type_name::<u8>(),
-        "You should use Bytes newtype wrapper for efficiency"
+        "You should use `casper_types::bytesrepr::Bytes` newtype wrapper instead of `Vec<u8>` for efficiency"
     );
 }
 
@@ -464,7 +541,7 @@ fn vec_from_vec<T: FromBytes>(bytes: Vec<u8>) -> Result<(Vec<T>, Vec<u8>), Error
 /// 4096 bytes. This function will never return less than 1.
 #[inline]
 fn cautious<T>(hint: usize) -> usize {
-    let el_size = core::mem::size_of::<T>();
+    let el_size = mem::size_of::<T>();
     core::cmp::max(core::cmp::min(hint, 4096 / el_size), 1)
 }
 
@@ -1291,21 +1368,24 @@ pub(crate) fn vec_u8_serialized_length(vec: &Vec<u8>) -> usize {
     u8_slice_serialized_length(vec.as_slice())
 }
 
-// This test helper is not intended to be used by third party crates.
-#[doc(hidden)]
-/// Returns `true` if a we can serialize and then deserialize a value
+/// Asserts that `t` can be serialized and when deserialized back into an instance `T` compares
+/// equal to `t`.
+///
+/// Also asserts that `t.serialized_length()` is the same as the actual number of bytes of the
+/// serialized `t` instance.
+#[cfg(any(feature = "testing", test))]
+#[track_caller]
 pub fn test_serialization_roundtrip<T>(t: &T)
 where
-    T: alloc::fmt::Debug + ToBytes + FromBytes + PartialEq,
+    T: fmt::Debug + ToBytes + FromBytes + PartialEq,
 {
     let serialized = ToBytes::to_bytes(t).expect("Unable to serialize data");
     assert_eq!(
         serialized.len(),
         t.serialized_length(),
-        "\nLength of serialized data: {},\nserialized_length() yielded: {},\nserialized data: {:?}, t is {:?}",
+        "\nLength of serialized data: {},\nserialized_length() yielded: {},\n t is {:?}",
         serialized.len(),
         t.serialized_length(),
-        serialized,
         t
     );
     let mut written_bytes = vec![];
@@ -1313,14 +1393,14 @@ where
         .expect("Unable to serialize data via write_bytes");
     assert_eq!(serialized, written_bytes);
 
-    let deserialized_from_slice =
-        deserialize_from_slice(&serialized).expect("Unable to deserialize data");
-    // assert!(*t == deserialized);
+    let deserialized_from_slice = deserialize_from_slice(&serialized)
+        .unwrap_or_else(|error| panic!("Unable to deserialize data: {error:?} ({t:?})"));
     assert_eq!(*t, deserialized_from_slice);
 
     let deserialized = deserialize::<T>(serialized).expect("Unable to deserialize data");
     assert_eq!(*t, deserialized);
 }
+
 #[cfg(test)]
 mod tests {
     use crate::U128;
@@ -1336,7 +1416,7 @@ mod tests {
     #[test]
     fn should_not_deserialize_zero_denominator() {
         let malicious_bytes = (1u64, 0u64).to_bytes().unwrap();
-        let result: Result<Ratio<u64>, Error> = super::deserialize(malicious_bytes);
+        let result: Result<Ratio<u64>, Error> = deserialize(malicious_bytes);
         assert_eq!(result.unwrap_err(), Error::Formatting);
     }
 
@@ -1363,7 +1443,9 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "You should use Bytes newtype wrapper for efficiency")]
+    #[should_panic(
+        expected = "You should use `casper_types::bytesrepr::Bytes` newtype wrapper instead of `Vec<u8>` for efficiency"
+    )]
     fn should_fail_to_serialize_slice_of_u8() {
         let bytes = b"0123456789".to_vec();
         bytes.to_bytes().unwrap();
@@ -1632,7 +1714,7 @@ mod proptests {
             bytesrepr::test_serialization_roundtrip(&t);
         }
         #[test]
-        fn test_ratio_u64(t in (any::<u64>(), 1..u64::max_value())) {
+        fn test_ratio_u64(t in (any::<u64>(), 1..u64::MAX)) {
             bytesrepr::test_serialization_roundtrip(&t);
         }
     }

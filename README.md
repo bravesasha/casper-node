@@ -23,6 +23,7 @@ The Casper MainNet is live.
 
 - [Platform Specification](https://docs.casperlabs.io/design/)
 - [Highway Consensus Proofs](https://github.com/CasperLabs/highway/releases/latest)
+- [Zug Consensus Whitepaper](http://arxiv.org/pdf/2205.06314)
 
 ### Get Started with Smart Contracts
 - [Writing Smart Contracts](https://docs.casperlabs.io/developers/)
@@ -96,7 +97,7 @@ __The node will not run properly without another node to connect to.  It is reco
 
 ### Running multiple nodes on one machine
 
-There is a [tool](https://github.com/casper-network/casper-node/tree/dev/utils/nctl) which automates the process of running multiple nodes on a single machine.
+There is a [tool](https://github.com/casper-network/casper-nctl) which automates the process of running multiple nodes on a single machine.
 
 Note that running multiple nodes on a single machine is normally only recommended for test purposes.
 
@@ -297,7 +298,7 @@ See [the client README](https://github.com/casper-ecosystem/casper-client-rs#rea
 
 ## Running a local network
 
-See [the nctl utility README](utils/nctl/README.md).
+See [the nctl utility README](https://github.com/casper-network/casper-nctl#readme).
 
 ## Running on an existing network
 

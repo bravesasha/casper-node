@@ -6,17 +6,27 @@ use core::mem::MaybeUninit;
 use casper_types::{
     account::AccountHash,
     api_error,
-    bytesrepr::{self, FromBytes},
-    contracts::{ContractVersion, NamedKeys},
-    system::CallStackElement,
-    ApiError, BlockTime, CLTyped, CLValue, ContractHash, ContractPackageHash, Key, Phase,
-    RuntimeArgs, URef, BLAKE2B_DIGEST_LENGTH, BLOCKTIME_SERIALIZED_LENGTH, PHASE_SERIALIZED_LENGTH,
+    bytesrepr::{self, FromBytes, U64_SERIALIZED_LENGTH},
+    contract_messages::{MessagePayload, MessageTopicOperation},
+    contracts::{ContractHash, ContractPackageHash, ContractVersion, NamedKeys},
+    system::CallerInfo,
+    ApiError, BlockTime, CLTyped, CLValue, Digest, HashAlgorithm, Key, Phase, RuntimeArgs, URef,
+    BLAKE2B_DIGEST_LENGTH, BLOCKTIME_SERIALIZED_LENGTH, PHASE_SERIALIZED_LENGTH,
 };
 
 use crate::{contract_api, ext_ffi, unwrap_or_revert::UnwrapOrRevert};
 
 /// Number of random bytes returned from the `random_bytes()` function.
 const RANDOM_BYTES_COUNT: usize = 32;
+
+const ACCOUNT: u8 = 0;
+
+#[repr(u8)]
+enum CallerIndex {
+    Initiator = 0,
+    Immediate = 1,
+    FullStack = 2,
+}
 
 /// Returns the given [`CLValue`] to the host, terminating the currently running module.
 ///
@@ -185,6 +195,37 @@ pub fn get_named_arg<T: FromBytes>(name: &str) -> T {
     bytesrepr::deserialize(arg_bytes).unwrap_or_revert_with(ApiError::InvalidArgument)
 }
 
+/// Returns given named argument passed to the host for the current module invocation.
+/// If the argument is not found, returns `None`.
+///
+/// Note that this is only relevant to contracts stored on-chain since a contract deployed directly
+/// is not invoked with any arguments.
+pub fn try_get_named_arg<T: FromBytes>(name: &str) -> Option<T> {
+    let arg_size = get_named_arg_size(name)?;
+    let arg_bytes = if arg_size > 0 {
+        let res = {
+            let data_non_null_ptr = contract_api::alloc_bytes(arg_size);
+            let ret = unsafe {
+                ext_ffi::casper_get_named_arg(
+                    name.as_bytes().as_ptr(),
+                    name.len(),
+                    data_non_null_ptr.as_ptr(),
+                    arg_size,
+                )
+            };
+            let data =
+                unsafe { Vec::from_raw_parts(data_non_null_ptr.as_ptr(), arg_size, arg_size) };
+            api_error::result_from(ret).map(|_| data)
+        };
+        // Assumed to be safe as `get_named_arg_size` checks the argument already
+        res.unwrap_or_revert()
+    } else {
+        // Avoids allocation with 0 bytes and a call to get_named_arg
+        Vec::new()
+    };
+    bytesrepr::deserialize(arg_bytes).ok()
+}
+
 /// Returns the caller of the current context, i.e. the [`AccountHash`] of the account which made
 /// the deploy request.
 pub fn get_caller() -> AccountHash {
@@ -207,6 +248,59 @@ pub fn get_blocktime() -> BlockTime {
             dest_non_null_ptr.as_ptr(),
             BLOCKTIME_SERIALIZED_LENGTH,
             BLOCKTIME_SERIALIZED_LENGTH,
+        )
+    };
+    bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+/// The default length of hashes such as account hash, state hash, hash addresses, etc.
+pub const DEFAULT_HASH_LENGTH: u8 = 32;
+/// Index for the block time field of block info.
+pub const BLOCK_TIME_FIELD_IDX: u8 = 0;
+/// Index for the block height field of block info.
+pub const BLOCK_HEIGHT_FIELD_IDX: u8 = 1;
+/// Index for the parent block hash field of block info.
+pub const PARENT_BLOCK_HASH_FIELD_IDX: u8 = 2;
+/// Index for the state hash field of block info.
+pub const STATE_HASH_FIELD_IDX: u8 = 3;
+
+/// Returns the block height.
+pub fn get_block_height() -> u64 {
+    let dest_non_null_ptr = contract_api::alloc_bytes(U64_SERIALIZED_LENGTH);
+    let bytes = unsafe {
+        ext_ffi::casper_get_block_info(BLOCK_HEIGHT_FIELD_IDX, dest_non_null_ptr.as_ptr());
+        Vec::from_raw_parts(
+            dest_non_null_ptr.as_ptr(),
+            U64_SERIALIZED_LENGTH,
+            U64_SERIALIZED_LENGTH,
+        )
+    };
+    bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+/// Returns the parent block hash.
+pub fn get_parent_block_hash() -> Digest {
+    let dest_non_null_ptr = contract_api::alloc_bytes(DEFAULT_HASH_LENGTH as usize);
+    let bytes = unsafe {
+        ext_ffi::casper_get_block_info(PARENT_BLOCK_HASH_FIELD_IDX, dest_non_null_ptr.as_ptr());
+        Vec::from_raw_parts(
+            dest_non_null_ptr.as_ptr(),
+            DEFAULT_HASH_LENGTH as usize,
+            DEFAULT_HASH_LENGTH as usize,
+        )
+    };
+    bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+/// Returns the state root hash.
+pub fn get_state_hash() -> Digest {
+    let dest_non_null_ptr = contract_api::alloc_bytes(DEFAULT_HASH_LENGTH as usize);
+    let bytes = unsafe {
+        ext_ffi::casper_get_block_info(STATE_HASH_FIELD_IDX, dest_non_null_ptr.as_ptr());
+        Vec::from_raw_parts(
+            dest_non_null_ptr.as_ptr(),
+            DEFAULT_HASH_LENGTH as usize,
+            DEFAULT_HASH_LENGTH as usize,
         )
     };
     bytesrepr::deserialize(bytes).unwrap_or_revert()
@@ -340,9 +434,10 @@ pub fn is_valid_uref(uref: URef) -> bool {
 pub fn blake2b<T: AsRef<[u8]>>(input: T) -> [u8; BLAKE2B_DIGEST_LENGTH] {
     let mut ret = [0; BLAKE2B_DIGEST_LENGTH];
     let result = unsafe {
-        ext_ffi::casper_blake2b(
+        ext_ffi::casper_generic_hash(
             input.as_ref().as_ptr(),
             input.as_ref().len(),
+            HashAlgorithm::Blake2b as u8,
             ret.as_mut_ptr(),
             BLAKE2B_DIGEST_LENGTH,
         )
@@ -383,12 +478,13 @@ pub(crate) fn read_host_buffer(size: usize) -> Result<Vec<u8>, ApiError> {
 }
 
 /// Returns the call stack.
-pub fn get_call_stack() -> Vec<CallStackElement> {
+pub fn get_call_stack() -> Vec<CallerInfo> {
     let (call_stack_len, result_size) = {
         let mut call_stack_len: usize = 0;
         let mut result_size: usize = 0;
         let ret = unsafe {
-            ext_ffi::casper_load_call_stack(
+            ext_ffi::casper_load_caller_information(
+                CallerIndex::FullStack as u8,
                 &mut call_stack_len as *mut usize,
                 &mut result_size as *mut usize,
             )
@@ -401,6 +497,98 @@ pub fn get_call_stack() -> Vec<CallStackElement> {
     }
     let bytes = read_host_buffer(result_size).unwrap_or_revert();
     bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+fn get_initiator_or_immediate(action: u8) -> Result<CallerInfo, ApiError> {
+    let (call_stack_len, result_size) = {
+        let mut call_stack_len: usize = 0;
+        let mut result_size: usize = 0;
+        let ret = unsafe {
+            ext_ffi::casper_load_caller_information(
+                action,
+                &mut call_stack_len as *mut usize,
+                &mut result_size as *mut usize,
+            )
+        };
+        api_error::result_from(ret).unwrap_or_revert();
+        (call_stack_len, result_size)
+    };
+    if call_stack_len == 0 {
+        return Err(ApiError::InvalidCallerInfoRequest);
+    }
+    let bytes = read_host_buffer(result_size).unwrap_or_revert();
+    let caller: Vec<CallerInfo> = bytesrepr::deserialize(bytes).unwrap_or_revert();
+
+    if caller.len() != 1 {
+        return Err(ApiError::Unhandled);
+    };
+    let first = caller.first().unwrap_or_revert().clone();
+    Ok(first)
+}
+
+/// Returns the call stack initiator
+pub fn get_call_initiator() -> Result<AccountHash, ApiError> {
+    let caller = get_initiator_or_immediate(CallerIndex::Initiator as u8)?;
+    if caller.kind() != ACCOUNT {
+        return Err(ApiError::Unhandled);
+    };
+    if let Some(cl_value) = caller.get_field_by_index(ACCOUNT) {
+        let maybe_account_hash = cl_value
+            .to_t::<Option<AccountHash>>()
+            .map_err(|_| ApiError::CLTypeMismatch)?;
+        match maybe_account_hash {
+            Some(hash) => Ok(hash),
+            None => Err(ApiError::None),
+        }
+    } else {
+        Err(ApiError::PurseNotCreated)
+    }
+}
+
+/// Returns the immidiate caller within the call stack.
+pub fn get_immediate_caller() -> Result<CallerInfo, ApiError> {
+    get_initiator_or_immediate(CallerIndex::Immediate as u8)
+}
+
+/// Manages a message topic.
+pub fn manage_message_topic(
+    topic_name: &str,
+    operation: MessageTopicOperation,
+) -> Result<(), ApiError> {
+    if topic_name.is_empty() {
+        return Err(ApiError::InvalidArgument);
+    }
+
+    let (operation_ptr, operation_size, _bytes) = contract_api::to_ptr(operation);
+    let result = unsafe {
+        ext_ffi::casper_manage_message_topic(
+            topic_name.as_ptr(),
+            topic_name.len(),
+            operation_ptr,
+            operation_size,
+        )
+    };
+    api_error::result_from(result)
+}
+
+/// Emits a message on a topic.
+pub fn emit_message(topic_name: &str, message: &MessagePayload) -> Result<(), ApiError> {
+    if topic_name.is_empty() {
+        return Err(ApiError::InvalidArgument);
+    }
+
+    let (message_ptr, message_size, _bytes) = contract_api::to_ptr(message);
+
+    let result = unsafe {
+        ext_ffi::casper_emit_message(
+            topic_name.as_ptr(),
+            topic_name.len(),
+            message_ptr,
+            message_size,
+        )
+    };
+
+    api_error::result_from(result)
 }
 
 #[cfg(feature = "test-support")]

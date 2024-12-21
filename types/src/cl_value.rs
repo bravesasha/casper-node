@@ -1,22 +1,29 @@
-// TODO - remove once schemars stops causing warning.
-#![allow(clippy::field_reassign_with_default)]
-
 use alloc::{string::String, vec::Vec};
 use core::fmt::{self, Display, Formatter};
-
-#[cfg(feature = "datasize")]
-use datasize::DataSize;
-#[cfg(feature = "json-schema")]
-use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
-use serde::{de::Error as SerdeError, Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
 
 use crate::{
     bytesrepr::{self, Bytes, FromBytes, ToBytes, U32_SERIALIZED_LENGTH},
     checksummed_hex, CLType, CLTyped,
 };
+#[cfg(feature = "datasize")]
+use datasize::DataSize;
+#[cfg(feature = "json-schema")]
+use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
+use serde::{de::Error as SerdeError, Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "json-schema")]
+use serde_json::Value;
+
+mod checksum_registry;
+mod dictionary;
+#[cfg(feature = "json-schema")]
 pub use jsonrepr::cl_value_to_json;
+#[cfg(feature = "json-schema")]
 mod jsonrepr;
+mod system_entity_registry;
+
+pub use checksum_registry::ChecksumRegistry;
+pub use dictionary::{handle_stored_dictionary_value, DictionaryValue};
+pub use system_entity_registry::SystemHashRegistry;
 
 /// Error while converting a [`CLValue`] into a given type.
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -84,6 +91,20 @@ impl CLValue {
             cl_type: T::cl_type(),
             bytes: bytes.into(),
         })
+    }
+
+    /// Converts `self` into its underlying type.
+    pub fn to_t<T: CLTyped + FromBytes>(&self) -> Result<T, CLValueError> {
+        let expected = T::cl_type();
+
+        if self.cl_type == expected {
+            Ok(bytesrepr::deserialize_from_slice(&self.bytes)?)
+        } else {
+            Err(CLValueError::Type(CLTypeMismatch {
+                expected,
+                found: self.cl_type.clone(),
+            }))
+        }
     }
 
     /// Consumes and converts `self` back into its underlying type.
@@ -197,6 +218,7 @@ impl JsonSchema for CLValue {
 struct CLValueJson {
     cl_type: CLType,
     bytes: String,
+    #[cfg(feature = "json-schema")]
     parsed: Option<Value>,
 }
 
@@ -206,6 +228,7 @@ impl Serialize for CLValue {
             CLValueJson {
                 cl_type: self.cl_type.clone(),
                 bytes: base16::encode_lower(&self.bytes),
+                #[cfg(feature = "json-schema")]
                 parsed: jsonrepr::cl_value_to_json(self),
             }
             .serialize(serializer)
@@ -244,8 +267,8 @@ mod tests {
     use crate::{
         account::{AccountHash, ACCOUNT_HASH_LENGTH},
         key::KEY_HASH_LENGTH,
-        AccessRights, DeployHash, Key, PublicKey, TransferAddr, URef, DEPLOY_HASH_LENGTH,
-        TRANSFER_ADDR_LENGTH, U128, U256, U512, UREF_ADDR_LENGTH,
+        AccessRights, DeployHash, Digest, Key, PublicKey, TransferAddr, URef, TRANSFER_ADDR_LENGTH,
+        U128, U256, U512, UREF_ADDR_LENGTH,
     };
 
     #[cfg(feature = "json-schema")]
@@ -304,23 +327,20 @@ mod tests {
 
         #[test]
         fn i32_cl_value_should_encode_to_json() {
-            check_to_json(
-                i32::min_value(),
-                r#"{"cl_type":"I32","parsed":-2147483648}"#,
-            );
+            check_to_json(i32::MIN, r#"{"cl_type":"I32","parsed":-2147483648}"#);
             check_to_json(0_i32, r#"{"cl_type":"I32","parsed":0}"#);
-            check_to_json(i32::max_value(), r#"{"cl_type":"I32","parsed":2147483647}"#);
+            check_to_json(i32::MAX, r#"{"cl_type":"I32","parsed":2147483647}"#);
         }
 
         #[test]
         fn i64_cl_value_should_encode_to_json() {
             check_to_json(
-                i64::min_value(),
+                i64::MIN,
                 r#"{"cl_type":"I64","parsed":-9223372036854775808}"#,
             );
             check_to_json(0_i64, r#"{"cl_type":"I64","parsed":0}"#);
             check_to_json(
-                i64::max_value(),
+                i64::MAX,
                 r#"{"cl_type":"I64","parsed":9223372036854775807}"#,
             );
         }
@@ -328,20 +348,20 @@ mod tests {
         #[test]
         fn u8_cl_value_should_encode_to_json() {
             check_to_json(0_u8, r#"{"cl_type":"U8","parsed":0}"#);
-            check_to_json(u8::max_value(), r#"{"cl_type":"U8","parsed":255}"#);
+            check_to_json(u8::MAX, r#"{"cl_type":"U8","parsed":255}"#);
         }
 
         #[test]
         fn u32_cl_value_should_encode_to_json() {
             check_to_json(0_u32, r#"{"cl_type":"U32","parsed":0}"#);
-            check_to_json(u32::max_value(), r#"{"cl_type":"U32","parsed":4294967295}"#);
+            check_to_json(u32::MAX, r#"{"cl_type":"U32","parsed":4294967295}"#);
         }
 
         #[test]
         fn u64_cl_value_should_encode_to_json() {
             check_to_json(0_u64, r#"{"cl_type":"U64","parsed":0}"#);
             check_to_json(
-                u64::max_value(),
+                u64::MAX,
                 r#"{"cl_type":"U64","parsed":18446744073709551615}"#,
             );
         }
@@ -350,7 +370,7 @@ mod tests {
         fn u128_cl_value_should_encode_to_json() {
             check_to_json(U128::zero(), r#"{"cl_type":"U128","parsed":"0"}"#);
             check_to_json(
-                U128::max_value(),
+                U128::MAX,
                 r#"{"cl_type":"U128","parsed":"340282366920938463463374607431768211455"}"#,
             );
         }
@@ -359,7 +379,7 @@ mod tests {
         fn u256_cl_value_should_encode_to_json() {
             check_to_json(U256::zero(), r#"{"cl_type":"U256","parsed":"0"}"#);
             check_to_json(
-                U256::max_value(),
+                U256::MAX,
                 r#"{"cl_type":"U256","parsed":"115792089237316195423570985008687907853269984665640564039457584007913129639935"}"#,
             );
         }
@@ -368,7 +388,7 @@ mod tests {
         fn u512_cl_value_should_encode_to_json() {
             check_to_json(U512::zero(), r#"{"cl_type":"U512","parsed":"0"}"#);
             check_to_json(
-                U512::max_value(),
+                U512::MAX,
                 r#"{"cl_type":"U512","parsed":"13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084095"}"#,
             );
         }
@@ -392,31 +412,31 @@ mod tests {
             let key_account = Key::Account(AccountHash::new([1; ACCOUNT_HASH_LENGTH]));
             check_to_json(
                 key_account,
-                r#"{"cl_type":"Key","parsed":{"Account":"account-hash-0101010101010101010101010101010101010101010101010101010101010101"}}"#,
+                r#"{"cl_type":"Key","parsed":"account-hash-0101010101010101010101010101010101010101010101010101010101010101"}"#,
             );
 
             let key_hash = Key::Hash([2; KEY_HASH_LENGTH]);
             check_to_json(
                 key_hash,
-                r#"{"cl_type":"Key","parsed":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
+                r#"{"cl_type":"Key","parsed":"hash-0202020202020202020202020202020202020202020202020202020202020202"}"#,
             );
 
             let key_uref = Key::URef(URef::new([3; UREF_ADDR_LENGTH], AccessRights::READ));
             check_to_json(
                 key_uref,
-                r#"{"cl_type":"Key","parsed":{"URef":"uref-0303030303030303030303030303030303030303030303030303030303030303-001"}}"#,
+                r#"{"cl_type":"Key","parsed":"uref-0303030303030303030303030303030303030303030303030303030303030303-001"}"#,
             );
 
             let key_transfer = Key::Transfer(TransferAddr::new([4; TRANSFER_ADDR_LENGTH]));
             check_to_json(
                 key_transfer,
-                r#"{"cl_type":"Key","parsed":{"Transfer":"transfer-0404040404040404040404040404040404040404040404040404040404040404"}}"#,
+                r#"{"cl_type":"Key","parsed":"transfer-0404040404040404040404040404040404040404040404040404040404040404"}"#,
             );
 
-            let key_deploy_info = Key::DeployInfo(DeployHash::new([5; DEPLOY_HASH_LENGTH]));
+            let key_deploy_info = Key::DeployInfo(DeployHash::from_raw([5; Digest::LENGTH]));
             check_to_json(
                 key_deploy_info,
-                r#"{"cl_type":"Key","parsed":{"DeployInfo":"deploy-0505050505050505050505050505050505050505050505050505050505050505"}}"#,
+                r#"{"cl_type":"Key","parsed":"deploy-0505050505050505050505050505050505050505050505050505050505050505"}"#,
             );
         }
 
@@ -466,12 +486,12 @@ mod tests {
         #[test]
         fn i32_cl_value_should_encode_to_json() {
             check_to_json(
-                Some(i32::min_value()),
+                Some(i32::MIN),
                 r#"{"cl_type":{"Option":"I32"},"parsed":-2147483648}"#,
             );
             check_to_json(Some(0_i32), r#"{"cl_type":{"Option":"I32"},"parsed":0}"#);
             check_to_json(
-                Some(i32::max_value()),
+                Some(i32::MAX),
                 r#"{"cl_type":{"Option":"I32"},"parsed":2147483647}"#,
             );
             check_to_json(
@@ -483,12 +503,12 @@ mod tests {
         #[test]
         fn i64_cl_value_should_encode_to_json() {
             check_to_json(
-                Some(i64::min_value()),
+                Some(i64::MIN),
                 r#"{"cl_type":{"Option":"I64"},"parsed":-9223372036854775808}"#,
             );
             check_to_json(Some(0_i64), r#"{"cl_type":{"Option":"I64"},"parsed":0}"#);
             check_to_json(
-                Some(i64::max_value()),
+                Some(i64::MAX),
                 r#"{"cl_type":{"Option":"I64"},"parsed":9223372036854775807}"#,
             );
             check_to_json(
@@ -500,10 +520,7 @@ mod tests {
         #[test]
         fn u8_cl_value_should_encode_to_json() {
             check_to_json(Some(0_u8), r#"{"cl_type":{"Option":"U8"},"parsed":0}"#);
-            check_to_json(
-                Some(u8::max_value()),
-                r#"{"cl_type":{"Option":"U8"},"parsed":255}"#,
-            );
+            check_to_json(Some(u8::MAX), r#"{"cl_type":{"Option":"U8"},"parsed":255}"#);
             check_to_json(
                 Option::<u8>::None,
                 r#"{"cl_type":{"Option":"U8"},"parsed":null}"#,
@@ -514,7 +531,7 @@ mod tests {
         fn u32_cl_value_should_encode_to_json() {
             check_to_json(Some(0_u32), r#"{"cl_type":{"Option":"U32"},"parsed":0}"#);
             check_to_json(
-                Some(u32::max_value()),
+                Some(u32::MAX),
                 r#"{"cl_type":{"Option":"U32"},"parsed":4294967295}"#,
             );
             check_to_json(
@@ -527,7 +544,7 @@ mod tests {
         fn u64_cl_value_should_encode_to_json() {
             check_to_json(Some(0_u64), r#"{"cl_type":{"Option":"U64"},"parsed":0}"#);
             check_to_json(
-                Some(u64::max_value()),
+                Some(u64::MAX),
                 r#"{"cl_type":{"Option":"U64"},"parsed":18446744073709551615}"#,
             );
             check_to_json(
@@ -543,7 +560,7 @@ mod tests {
                 r#"{"cl_type":{"Option":"U128"},"parsed":"0"}"#,
             );
             check_to_json(
-                Some(U128::max_value()),
+                Some(U128::MAX),
                 r#"{"cl_type":{"Option":"U128"},"parsed":"340282366920938463463374607431768211455"}"#,
             );
             check_to_json(
@@ -559,7 +576,7 @@ mod tests {
                 r#"{"cl_type":{"Option":"U256"},"parsed":"0"}"#,
             );
             check_to_json(
-                Some(U256::max_value()),
+                Some(U256::MAX),
                 r#"{"cl_type":{"Option":"U256"},"parsed":"115792089237316195423570985008687907853269984665640564039457584007913129639935"}"#,
             );
             check_to_json(
@@ -575,7 +592,7 @@ mod tests {
                 r#"{"cl_type":{"Option":"U512"},"parsed":"0"}"#,
             );
             check_to_json(
-                Some(U512::max_value()),
+                Some(U512::MAX),
                 r#"{"cl_type":{"Option":"U512"},"parsed":"13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084095"}"#,
             );
             check_to_json(
@@ -614,31 +631,31 @@ mod tests {
             let key_account = Key::Account(AccountHash::new([1; ACCOUNT_HASH_LENGTH]));
             check_to_json(
                 Some(key_account),
-                r#"{"cl_type":{"Option":"Key"},"parsed":{"Account":"account-hash-0101010101010101010101010101010101010101010101010101010101010101"}}"#,
+                r#"{"cl_type":{"Option":"Key"},"parsed":"account-hash-0101010101010101010101010101010101010101010101010101010101010101"}"#,
             );
 
             let key_hash = Key::Hash([2; KEY_HASH_LENGTH]);
             check_to_json(
                 Some(key_hash),
-                r#"{"cl_type":{"Option":"Key"},"parsed":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
+                r#"{"cl_type":{"Option":"Key"},"parsed":"hash-0202020202020202020202020202020202020202020202020202020202020202"}"#,
             );
 
             let key_uref = Key::URef(URef::new([3; UREF_ADDR_LENGTH], AccessRights::READ));
             check_to_json(
                 Some(key_uref),
-                r#"{"cl_type":{"Option":"Key"},"parsed":{"URef":"uref-0303030303030303030303030303030303030303030303030303030303030303-001"}}"#,
+                r#"{"cl_type":{"Option":"Key"},"parsed":"uref-0303030303030303030303030303030303030303030303030303030303030303-001"}"#,
             );
 
             let key_transfer = Key::Transfer(TransferAddr::new([4; TRANSFER_ADDR_LENGTH]));
             check_to_json(
                 Some(key_transfer),
-                r#"{"cl_type":{"Option":"Key"},"parsed":{"Transfer":"transfer-0404040404040404040404040404040404040404040404040404040404040404"}}"#,
+                r#"{"cl_type":{"Option":"Key"},"parsed":"transfer-0404040404040404040404040404040404040404040404040404040404040404"}"#,
             );
 
-            let key_deploy_info = Key::DeployInfo(DeployHash::new([5; DEPLOY_HASH_LENGTH]));
+            let key_deploy_info = Key::DeployInfo(DeployHash::from_raw([5; Digest::LENGTH]));
             check_to_json(
                 Some(key_deploy_info),
-                r#"{"cl_type":{"Option":"Key"},"parsed":{"DeployInfo":"deploy-0505050505050505050505050505050505050505050505050505050505050505"}}"#,
+                r#"{"cl_type":{"Option":"Key"},"parsed":"deploy-0505050505050505050505050505050505050505050505050505050505050505"}"#,
             );
 
             check_to_json(
@@ -1086,19 +1103,19 @@ mod tests {
             let key = Key::Hash([2; KEY_HASH_LENGTH]);
             check_to_json(
                 Result::<Key, i32>::Ok(key),
-                r#"{"cl_type":{"Result":{"ok":"Key","err":"I32"}},"parsed":{"Ok":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}}"#,
+                r#"{"cl_type":{"Result":{"ok":"Key","err":"I32"}},"parsed":{"Ok":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
             );
             check_to_json(
                 Result::<Key, u32>::Ok(key),
-                r#"{"cl_type":{"Result":{"ok":"Key","err":"U32"}},"parsed":{"Ok":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}}"#,
+                r#"{"cl_type":{"Result":{"ok":"Key","err":"U32"}},"parsed":{"Ok":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
             );
             check_to_json(
                 Result::<Key, ()>::Ok(key),
-                r#"{"cl_type":{"Result":{"ok":"Key","err":"Unit"}},"parsed":{"Ok":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}}"#,
+                r#"{"cl_type":{"Result":{"ok":"Key","err":"Unit"}},"parsed":{"Ok":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
             );
             check_to_json(
                 Result::<Key, String>::Ok(key),
-                r#"{"cl_type":{"Result":{"ok":"Key","err":"String"}},"parsed":{"Ok":{"Hash":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}}"#,
+                r#"{"cl_type":{"Result":{"ok":"Key","err":"String"}},"parsed":{"Ok":"hash-0202020202020202020202020202020202020202020202020202020202020202"}}"#,
             );
             check_to_json(
                 Result::<Key, i32>::Err(-1),

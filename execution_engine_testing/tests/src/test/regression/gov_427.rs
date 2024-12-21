@@ -1,9 +1,9 @@
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, DEFAULT_WASM_CONFIG,
-    PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, DEFAULT_WASM_V1_CONFIG,
+    LOCAL_GENESIS_REQUEST,
 };
-use casper_execution_engine::core::{engine_state::Error, execution};
-use casper_types::{contracts::DEFAULT_ENTRY_POINT_NAME, RuntimeArgs};
+use casper_execution_engine::{engine_state::Error, execution::ExecError};
+use casper_types::{addressable_entity::DEFAULT_ENTRY_POINT_NAME, RuntimeArgs};
 use walrus::{ir::Value, FunctionBuilder, Module, ModuleConfig, ValType};
 
 /// Creates a wasm with a function that contains local section with types in `repeated_pattern`
@@ -63,7 +63,7 @@ fn too_many_locals_should_exceed_stack_height() {
     const CALL_COST: usize = 1;
     let extra_types = [ValType::I32];
     let repeat_pattern = [ValType::I64];
-    let max_stack_height = DEFAULT_WASM_CONFIG.max_stack_height as usize;
+    let max_stack_height = DEFAULT_WASM_V1_CONFIG.max_stack_height() as usize;
 
     let success_wasm_bytes: Vec<u8> = make_arbitrary_local_count(
         max_stack_height - extra_types.len() - CALL_COST - 1,
@@ -77,8 +77,8 @@ fn too_many_locals_should_exceed_stack_height() {
         &extra_types,
     );
 
-    let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
 
     let success_request = ExecuteRequestBuilder::module_bytes(
         *DEFAULT_ACCOUNT_ADDR,
@@ -105,7 +105,7 @@ fn too_many_locals_should_exceed_stack_height() {
     assert!(
         matches!(
             &error,
-            Error::Exec(execution::Error::Interpreter(s)) if s.contains("Unreachable")
+            Error::Exec(ExecError::Interpreter(s)) if s.contains("Unreachable")
         ),
         "{:?}",
         error

@@ -11,10 +11,9 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    account::AccountHash,
-    contracts::{NamedKeys, Parameters},
-    ApiError, CLType, ContractHash, EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Key,
-    RuntimeArgs, URef, U512,
+    account::AccountHash, addressable_entity::Parameters, contracts::NamedKeys,
+    AddressableEntityHash, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    EntryPointType, EntryPoints, Key, RuntimeArgs, URef, U512,
 };
 
 const DONATION_AMOUNT: u64 = 1;
@@ -132,7 +131,8 @@ fn delegate() -> Result<(), ApiError> {
                     Parameters::default(),
                     CLType::Unit,
                     EntryPointAccess::Public,
-                    EntryPointType::Contract,
+                    EntryPointType::Called,
+                    EntryPointPayment::Caller,
                 );
 
                 entry_points.add_entry_point(entry_point_1);
@@ -142,7 +142,8 @@ fn delegate() -> Result<(), ApiError> {
                     Parameters::default(),
                     CLType::Unit,
                     EntryPointAccess::Public,
-                    EntryPointType::Contract,
+                    EntryPointType::Called,
+                    EntryPointPayment::Caller,
                 );
 
                 entry_points.add_entry_point(entry_point_2);
@@ -152,7 +153,8 @@ fn delegate() -> Result<(), ApiError> {
                     Parameters::default(),
                     CLType::Unit,
                     EntryPointAccess::Public,
-                    EntryPointType::Contract,
+                    EntryPointType::Called,
+                    EntryPointPayment::Caller,
                 );
 
                 entry_points.add_entry_point(entry_point_3);
@@ -162,7 +164,8 @@ fn delegate() -> Result<(), ApiError> {
                     Parameters::default(),
                     CLType::Unit,
                     EntryPointAccess::Public,
-                    EntryPointType::Contract,
+                    EntryPointType::Called,
+                    EntryPointPayment::Caller,
                 );
 
                 entry_points.add_entry_point(entry_point_4);
@@ -171,8 +174,11 @@ fn delegate() -> Result<(), ApiError> {
             };
 
             let (contract_hash, _contract_version) =
-                storage::new_contract(entry_points, Some(known_keys), None, None);
-            runtime::put_key(TRANSFER_FUNDS_KEY, contract_hash.into());
+                storage::new_contract(entry_points, Some(known_keys), None, None, None);
+            runtime::put_key(
+                TRANSFER_FUNDS_KEY,
+                Key::contract_entity_key(AddressableEntityHash::new(contract_hash.value())),
+            );
             // For easy access in outside world here `donation` purse is also attached
             // to the account
             runtime::put_key(DONATION_PURSE_COPY, purse.into());
@@ -180,11 +186,15 @@ fn delegate() -> Result<(), ApiError> {
         METHOD_CALL => {
             // This comes from outside i.e. after deploying the contract, this key is queried,
             // and then passed into the call
-            let contract_key: ContractHash = runtime::get_named_arg(ARG_CONTRACTKEY);
+            let contract_key: AddressableEntityHash = runtime::get_named_arg(ARG_CONTRACTKEY);
 
             // This is a method that's gets forwarded into the sub contract
             let subcontract_method: String = runtime::get_named_arg(ARG_SUBCONTRACTMETHODFWD);
-            runtime::call_contract::<()>(contract_key, &subcontract_method, RuntimeArgs::default());
+            runtime::call_contract::<()>(
+                contract_key.into(),
+                &subcontract_method,
+                RuntimeArgs::default(),
+            );
         }
         _ => return Err(ContractError::InvalidDelegateMethod.into()),
     }

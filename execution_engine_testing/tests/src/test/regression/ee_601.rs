@@ -1,9 +1,8 @@
 use casper_engine_test_support::{
-    DeployItemBuilder, ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    DEFAULT_PAYMENT, PRODUCTION_RUN_GENESIS_REQUEST,
+    DeployItemBuilder, ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
+    DEFAULT_PAYMENT, LOCAL_GENESIS_REQUEST,
 };
-use casper_execution_engine::shared::{additive_map::AdditiveMap, transform::Transform};
-use casper_types::{runtime_args, CLValue, Key, RuntimeArgs, StoredValue};
+use casper_types::{runtime_args, CLValue, EntityAddr, RuntimeArgs, StoredValue};
 
 const ARG_AMOUNT: &str = "amount";
 
@@ -12,58 +11,45 @@ const ARG_AMOUNT: &str = "amount";
 fn should_run_ee_601_pay_session_new_uref_collision() {
     let genesis_account_hash = *DEFAULT_ACCOUNT_ADDR;
 
-    let exec_request = {
-        let deploy = DeployItemBuilder::new()
-            .with_deploy_hash([1; 32])
-            .with_address(*DEFAULT_ACCOUNT_ADDR)
-            .with_payment_code(
-                "ee_601_regression.wasm",
-                runtime_args! { ARG_AMOUNT => *DEFAULT_PAYMENT },
-            )
-            .with_session_code("ee_601_regression.wasm", RuntimeArgs::default())
-            .with_authorization_keys(&[genesis_account_hash])
-            .build();
+    let deploy_item = DeployItemBuilder::new()
+        .with_deploy_hash([1; 32])
+        .with_address(*DEFAULT_ACCOUNT_ADDR)
+        .with_payment_code(
+            "ee_601_regression.wasm",
+            runtime_args! { ARG_AMOUNT => *DEFAULT_PAYMENT },
+        )
+        .with_session_code("ee_601_regression.wasm", RuntimeArgs::default())
+        .with_authorization_keys(&[genesis_account_hash])
+        .build();
 
-        ExecuteRequestBuilder::new().push_deploy(deploy).build()
-    };
+    let exec_request = ExecuteRequestBuilder::from_deploy_item(&deploy_item).build();
 
-    let mut builder = InMemoryWasmTestBuilder::default();
+    let mut builder = LmdbWasmTestBuilder::default();
 
     builder
-        .run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST)
-        .exec(exec_request);
+        .run_genesis(LOCAL_GENESIS_REQUEST.clone())
+        .exec(exec_request)
+        .expect_success()
+        .commit();
 
-    let transforms = builder.get_execution_journals();
-    let transform: AdditiveMap<Key, Transform> = transforms[0].clone().into();
+    let hash = *DEFAULT_ACCOUNT_ADDR;
+    let named_keys = builder.get_named_keys(EntityAddr::Account(hash.value()));
 
-    let add_keys = if let Some(Transform::AddKeys(keys)) =
-        transform.get(&Key::Account(*DEFAULT_ACCOUNT_ADDR))
-    {
-        keys
-    } else {
-        panic!(
-            "expected AddKeys transform for given key but received {:?}",
-            transforms[0]
-        );
-    };
-
-    let pay_uref = add_keys
+    let payment_uref = *named_keys
         .get("new_uref_result-payment")
         .expect("payment uref should exist");
 
-    let session_uref = add_keys
+    let session_uref = *named_keys
         .get("new_uref_result-session")
         .expect("session uref should exist");
 
     assert_ne!(
-        pay_uref, session_uref,
+        payment_uref, session_uref,
         "payment and session code should not create same uref"
     );
 
-    builder.commit();
-
     let payment_value: StoredValue = builder
-        .query(None, *pay_uref, &[])
+        .query(None, payment_uref, &[])
         .expect("should find payment value");
 
     assert_eq!(
@@ -73,7 +59,7 @@ fn should_run_ee_601_pay_session_new_uref_collision() {
     );
 
     let session_value: StoredValue = builder
-        .query(None, *session_uref, &[])
+        .query(None, session_uref, &[])
         .expect("should find session value");
 
     assert_eq!(

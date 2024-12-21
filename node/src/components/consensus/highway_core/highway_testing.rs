@@ -59,8 +59,6 @@ impl Display for ConsensusValue {
 const TEST_MIN_ROUND_LEN: TimeDiff = TimeDiff::from_millis(1 << 12);
 const TEST_MAX_ROUND_LEN: TimeDiff = TimeDiff::from_millis(1 << 19);
 const TEST_END_HEIGHT: u64 = 100000;
-pub(crate) const TEST_BLOCK_REWARD: u64 = 1_000_000_000_000;
-pub(crate) const TEST_REDUCED_BLOCK_REWARD: u64 = 200_000_000_000;
 pub(crate) const TEST_INSTANCE_ID: u64 = 42;
 pub(crate) const TEST_ENDORSEMENT_EVIDENCE_LIMIT: u64 = 20;
 
@@ -73,7 +71,7 @@ enum HighwayMessage {
 }
 
 impl Debug for HighwayMessage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             HighwayMessage::Timer(t) => f.debug_tuple("Timer").field(&t.millis()).finish(),
             HighwayMessage::RequestBlock(bc) => f
@@ -155,7 +153,7 @@ pub(crate) enum TestRunError {
 }
 
 impl Display for TestRunError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             TestRunError::NoMessages => write!(
                 f,
@@ -520,9 +518,7 @@ where
                 value,
                 relative_height,
             );
-            if let Some(t) = terminal_block_data {
-                warn!(?t.rewards, "rewards and inactive validators are not verified yet");
-            }
+
             recipient.push_finalized(value);
         }
 
@@ -720,8 +716,6 @@ impl<'a, DS: DeliveryStrategy> MutableHandle<'a, DS> {
 fn test_params() -> Params {
     Params::new(
         0, // random seed
-        TEST_BLOCK_REWARD,
-        TEST_REDUCED_BLOCK_REWARD,
         TEST_MIN_ROUND_LEN,
         TEST_MAX_ROUND_LEN,
         TEST_MIN_ROUND_LEN,
@@ -941,7 +935,8 @@ impl<DS: DeliveryStrategy> HighwayTestHarnessBuilder<DS> {
             |(vid, secrets): (ValidatorId, &mut HashMap<ValidatorId, TestSecret>)| {
                 let v_sec = secrets.remove(&vid).expect("Secret key should exist.");
 
-                let mut highway = Highway::new(instance_id, validators.clone(), params.clone());
+                let mut highway =
+                    Highway::new(instance_id, validators.clone(), params.clone(), None);
                 let effects = highway.activate_validator(vid, v_sec, start_time, None, Weight(ftt));
 
                 let finality_detector = FinalityDetector::new(Weight(ftt));
@@ -1030,7 +1025,7 @@ impl Debug for HashWrapper {
 }
 
 impl Display for HashWrapper {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(self, f)
     }
 }
@@ -1145,8 +1140,8 @@ mod test_harness {
                 (
                     v.finalized_values().cloned().collect::<Vec<_>>(),
                     v.messages_produced()
+                        .filter(|&hwm| hwm.is_new_unit())
                         .cloned()
-                        .filter(|hwm| hwm.is_new_unit())
                         .count(),
                 )
             })

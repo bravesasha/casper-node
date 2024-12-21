@@ -146,9 +146,6 @@ enum ObtainDumpError {
 impl Session {
     /// Creates a serializer for an `EraDump`.
     fn create_era_dump_serializer(&self) -> fn(&EraDump<'_>) -> Result<Vec<u8>, Cow<'static, str>> {
-        // TODO: This function could probably be a generic serialization function for any `T`, but
-        // the conversion is tricky due to the lifetime arguments on `EraDump` and has not been done
-        // yet.
         match self.output {
             OutputFormat::Interactive => |data: &EraDump| {
                 let mut buf = data.to_string().into_bytes();
@@ -395,7 +392,7 @@ impl Session {
         let tempdir = tempfile::tempdir().map_err(ObtainDumpError::CreateTempDir)?;
         let tempfile_path = tempdir.path().join("queue-dump");
 
-        let tempfile = fs::File::create(&tempfile_path).map_err(ObtainDumpError::CreateTempFile)?;
+        let tempfile = File::create(&tempfile_path).map_err(ObtainDumpError::CreateTempFile)?;
 
         effect_builder
             .diagnostics_port_dump_queue(self.create_queue_dump_format(tempfile))
@@ -403,7 +400,7 @@ impl Session {
 
         // We can now reopen the file and return it.
         let reopened_tempfile =
-            fs::File::open(tempfile_path).map_err(ObtainDumpError::ReopenTempFile)?;
+            File::open(tempfile_path).map_err(ObtainDumpError::ReopenTempFile)?;
         Ok(reopened_tempfile)
     }
 
@@ -615,7 +612,7 @@ mod tests {
         sync::Notify,
     };
 
-    use casper_types::testing::TestRng;
+    use casper_types::{testing::TestRng, Chainspec, ChainspecRawBytes};
 
     use crate::{
         components::{
@@ -637,7 +634,6 @@ mod tests {
             self,
             network::{NetworkedReactor, TestingNetwork},
         },
-        types::{Chainspec, ChainspecRawBytes},
         utils::WeightedRoundRobin,
         NodeRng, WithDir,
     };

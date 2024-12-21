@@ -18,15 +18,17 @@ use regex::Regex;
 use stats_alloc::{StatsAlloc, INSTRUMENTED_SYSTEM};
 use structopt::StructOpt;
 use toml::{value::Table, Value};
-use tracing::info;
+use tracing::{error, info};
+
+use casper_types::{Chainspec, ChainspecRawBytes};
 
 use crate::{
     components::network::Identity as NetworkIdentity,
     logging,
     reactor::{main_reactor, Runner},
     setup_signal_hooks,
-    types::{Chainspec, ChainspecRawBytes, ExitCode},
-    utils::{Loadable, WithDir},
+    types::ExitCode,
+    utils::{chain_specification::validate_chainspec, Loadable, WithDir},
 };
 
 // We override the standard allocator to gather metrics and tune the allocator via the MALLOC_CONF
@@ -77,6 +79,11 @@ pub enum Cli {
         /// Path to configuration file of this version of node.
         #[structopt(long)]
         new_config: PathBuf,
+    },
+    /// Verify that a given config file can be parsed.
+    ValidateConfig {
+        /// Path to configuration file.
+        config: PathBuf,
     },
 }
 
@@ -149,7 +156,7 @@ impl Cli {
                 // Setup UNIX signal hooks.
                 setup_signal_hooks();
 
-                let mut validator_config = Self::init(&config, config_ext)?;
+                let mut reactor_config = Self::init(&config, config_ext)?;
 
                 // We use a `ChaCha20Rng` for the production node. For one, we want to completely
                 // eliminate any chance of runtime failures, regardless of how small (these
@@ -160,7 +167,7 @@ impl Cli {
                 let registry = Registry::new();
 
                 let (chainspec, chainspec_raw_bytes) =
-                    <(Chainspec, ChainspecRawBytes)>::from_path(validator_config.dir())?;
+                    <(Chainspec, ChainspecRawBytes)>::from_path(reactor_config.dir())?;
 
                 info!(
                     protocol_version = %chainspec.protocol_version(),
@@ -168,20 +175,20 @@ impl Cli {
                     "node starting up"
                 );
 
-                if !chainspec.is_valid() {
+                if !validate_chainspec(&chainspec) {
                     bail!("invalid chainspec");
                 }
 
-                validator_config.value_mut().ensure_valid(&chainspec);
+                reactor_config.value_mut().ensure_valid(&chainspec);
 
                 let network_identity = NetworkIdentity::from_config(WithDir::new(
-                    validator_config.dir(),
-                    validator_config.value().network.clone(),
+                    reactor_config.dir(),
+                    reactor_config.value().network.clone(),
                 ))
                 .context("failed to create a network identity")?;
 
                 let mut main_runner = Runner::<main_reactor::MainReactor>::with_metrics(
-                    validator_config,
+                    reactor_config,
                     Arc::new(chainspec),
                     Arc::new(chainspec_raw_bytes),
                     network_identity,
@@ -201,8 +208,7 @@ impl Cli {
 
                 let old_root = old_config
                     .parent()
-                    .map(|path| path.to_owned())
-                    .unwrap_or_else(|| "/".into());
+                    .map_or_else(|| "/".into(), Path::to_path_buf);
                 let encoded_old_config = fs::read_to_string(&old_config)
                     .context("could not read old configuration file")
                     .with_context(|| old_config.display().to_string())?;
@@ -223,8 +229,7 @@ impl Cli {
 
                 let old_root = old_config
                     .parent()
-                    .map(|path| path.to_owned())
-                    .unwrap_or_else(|| "/".into());
+                    .map_or_else(|| "/".into(), Path::to_path_buf);
                 let encoded_old_config = fs::read_to_string(&old_config)
                     .context("could not read old configuration file")
                     .with_context(|| old_config.display().to_string())?;
@@ -236,6 +241,21 @@ impl Cli {
                     new_config,
                 )?;
                 Ok(ExitCode::Success as i32)
+            }
+            Cli::ValidateConfig { config } => {
+                info!(build_version = %crate::VERSION_STRING.as_str(), config_file = ?config, "validating config file");
+                match Self::init(&config, vec![]) {
+                    Ok(_config) => {
+                        info!(build_version = %crate::VERSION_STRING.as_str(), config_file = ?config, "config file is valid");
+                        Ok(ExitCode::Success as i32)
+                    }
+                    Err(err) => {
+                        // initialize manually in case of error to avoid double initialization
+                        logging::init_with_config(&Default::default())?;
+                        error!(build_version = %crate::VERSION_STRING.as_str(), config_file = ?config, "config file is not valid");
+                        Err(err)
+                    }
+                }
             }
         }
     }
@@ -249,8 +269,7 @@ impl Cli {
         // Otherwise, we default to `/`.
         let root = config
             .parent()
-            .map(|path| path.to_owned())
-            .unwrap_or_else(|| "/".into());
+            .map_or_else(|| "/".into(), Path::to_path_buf);
 
         // The app supports running without a config file, using default values.
         let encoded_config = fs::read_to_string(config)

@@ -5,8 +5,7 @@ use openssl::{error::ErrorStack, ssl};
 use serde::Serialize;
 use thiserror::Error;
 
-use casper_hashing::Digest;
-use casper_types::{crypto, ProtocolVersion};
+use casper_types::{crypto, Digest, ProtocolVersion};
 
 use crate::{
     tls::{LoadCertError, ValidationError},
@@ -197,6 +196,9 @@ pub enum ConnectionError {
     /// This is usually a bug.
     #[error("handshake sink/stream could not be reunited")]
     FailedToReuniteHandshakeSinkAndStream,
+    /// Handshake not allowed (Isolated mode)
+    #[error("handshake not allowed (Isolated mode)")]
+    HandshakeNotAllowed,
 }
 
 /// IO operation that can time out or close.

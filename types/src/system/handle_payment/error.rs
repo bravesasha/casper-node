@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use core::{
     convert::TryFrom,
     fmt::{self, Display, Formatter},
-    result,
 };
 
 use crate::{
@@ -12,7 +11,6 @@ use crate::{
 };
 
 /// Errors which can occur while executing the Handle Payment contract.
-// TODO: Split this up into user errors vs. system errors.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 #[non_exhaustive]
@@ -142,8 +140,6 @@ pub enum Error {
     /// assert_eq!(19, Error::RewardsPurseKeyUnexpectedType as u8);
     /// ```
     RewardsPurseKeyUnexpectedType = 19,
-    // TODO: Put these in their own enum, and wrap them separately in `BondingError` and
-    //       `UnbondingError`.
     /// Internal error: failed to deserialize the stake's key.
     /// ```
     /// # use casper_types::system::handle_payment::Error;
@@ -156,13 +152,12 @@ pub enum Error {
     /// assert_eq!(21, Error::StakesDeserializationFailed as u8);
     /// ```
     StakesDeserializationFailed = 21,
-    /// The invoked Handle Payment function can only be called by system contracts, but was called
-    /// by a user contract.
+    /// Raised when caller is not the system account.
     /// ```
     /// # use casper_types::system::handle_payment::Error;
-    /// assert_eq!(22, Error::SystemFunctionCalledByUserAccount as u8);
+    /// assert_eq!(22, Error::InvalidCaller as u8);
     /// ```
-    SystemFunctionCalledByUserAccount = 22,
+    InvalidCaller = 22,
     /// Internal error: while finalizing payment, the amount spent exceeded the amount available.
     /// ```
     /// # use casper_types::system::handle_payment::Error;
@@ -255,6 +250,24 @@ pub enum Error {
     /// assert_eq!(37, Error::AccumulationPurseKeyUnexpectedType as u8);
     /// ```
     AccumulationPurseKeyUnexpectedType = 37,
+    /// Internal error: invalid fee and / or refund settings encountered during payment processing.
+    /// ```
+    /// # use casper_types::system::handle_payment::Error;
+    /// assert_eq!(38, Error::IncompatiblePaymentSettings as u8);
+    /// ```
+    IncompatiblePaymentSettings = 38,
+    /// Unexpected key variant.
+    /// ```
+    /// # use casper_types::system::handle_payment::Error;
+    /// assert_eq!(39, Error::UnexpectedKeyVariant as u8);
+    /// ```
+    UnexpectedKeyVariant = 39,
+    /// Attempt to persist payment purse.
+    /// ```
+    /// # use casper_types::system::handle_payment::Error;
+    /// assert_eq!(40, Error::AttemptToPersistPaymentPurse as u8);
+    /// ```
+    AttemptToPersistPaymentPurse = 40,
 }
 
 impl Display for Error {
@@ -296,7 +309,7 @@ impl Display for Error {
             Error::StakesDeserializationFailed => {
                 formatter.write_str("Failed to deserialize stake's balance")
             }
-            Error::SystemFunctionCalledByUserAccount => {
+            Error::InvalidCaller => {
                 formatter.write_str("System function was called by user account")
             }
             Error::InsufficientPaymentForAmountSpent => {
@@ -325,6 +338,13 @@ impl Display for Error {
             Error::AccumulationPurseNotFound => formatter.write_str("Accumulation purse not found"),
             Error::AccumulationPurseKeyUnexpectedType => {
                 formatter.write_str("Accumulation purse has unexpected type")
+            }
+            Error::IncompatiblePaymentSettings => {
+                formatter.write_str("Incompatible payment settings")
+            }
+            Error::UnexpectedKeyVariant => formatter.write_str("Unexpected key variant"),
+            Error::AttemptToPersistPaymentPurse => {
+                formatter.write_str("Attempt to persist payment purse")
             }
         }
     }
@@ -371,9 +391,7 @@ impl TryFrom<u8> for Error {
             v if v == Error::StakesDeserializationFailed as u8 => {
                 Error::StakesDeserializationFailed
             }
-            v if v == Error::SystemFunctionCalledByUserAccount as u8 => {
-                Error::SystemFunctionCalledByUserAccount
-            }
+            v if v == Error::InvalidCaller as u8 => Error::InvalidCaller,
             v if v == Error::InsufficientPaymentForAmountSpent as u8 => {
                 Error::InsufficientPaymentForAmountSpent
             }
@@ -400,6 +418,13 @@ impl TryFrom<u8> for Error {
             v if v == Error::AccumulationPurseKeyUnexpectedType as u8 => {
                 Error::AccumulationPurseKeyUnexpectedType
             }
+            v if v == Error::IncompatiblePaymentSettings as u8 => {
+                Error::IncompatiblePaymentSettings
+            }
+            v if v == Error::UnexpectedKeyVariant as u8 => Error::UnexpectedKeyVariant,
+            v if v == Error::AttemptToPersistPaymentPurse as u8 => {
+                Error::AttemptToPersistPaymentPurse
+            }
             _ => return Err(()),
         };
         Ok(error)
@@ -413,7 +438,7 @@ impl CLTyped for Error {
 }
 
 impl ToBytes for Error {
-    fn to_bytes(&self) -> result::Result<Vec<u8>, bytesrepr::Error> {
+    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let value = *self as u8;
         value.to_bytes()
     }

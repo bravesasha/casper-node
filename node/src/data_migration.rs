@@ -2,16 +2,17 @@ use std::{env, fs, io, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use toml::de::Error as TomlDecodeError;
 use tracing::info;
 
-use casper_hashing::Digest;
-use casper_types::{crypto, ProtocolVersion, PublicKey, SecretKey, Signature};
+use casper_types::{
+    crypto, Chainspec, ChainspecRawBytes, Digest, ProtocolVersion, PublicKey, SecretKey, Signature,
+};
 
 use crate::{
     reactor::main_reactor::Config,
-    types::{chainspec, Chainspec, ChainspecRawBytes},
-    utils::{LoadError, Loadable, WithDir},
+    utils::{
+        chain_specification::error::Error as LoadChainspecError, LoadError, Loadable, WithDir,
+    },
 };
 
 /// The name of the file for recording the new global state hash after a data migration.
@@ -21,8 +22,6 @@ const CONFIG_ROOT_DIR: &str = "/etc/casper";
 /// Environment variable to override the config root dir.
 const CONFIG_ROOT_DIR_OVERRIDE: &str = "CASPER_CONFIG_DIR";
 
-// TODO - remove once used.
-#[allow(unused)]
 /// Error returned as a result of migrating data.
 #[derive(Debug, Error)]
 pub(crate) enum Error {
@@ -56,31 +55,13 @@ pub(crate) enum Error {
     #[error("invalid signature of state hash info")]
     InvalidSignatureOfStateHashInfo,
 
-    /// Error reading config file.
-    #[error("error reading config from {path}: {error}")]
-    ReadConfig {
-        /// The file path.
-        path: String,
-        /// The IO error.
-        error: io::Error,
-    },
-
-    /// Error decoding config file.
-    #[error("error reading config from {path}: {error}")]
-    DecodeConfig {
-        /// The file path.
-        path: String,
-        /// The TOML error.
-        error: TomlDecodeError,
-    },
-
     /// Error loading the secret key.
     #[error("error loading secret key: {0}")]
     LoadSecretKey(LoadError<crypto::ErrorExt>),
 
     /// Error loading the chainspec.
     #[error("error loading chainspec: {0}")]
-    LoadChainspec(chainspec::Error),
+    LoadChainspec(LoadChainspecError),
 }
 
 #[derive(Serialize, Deserialize)]

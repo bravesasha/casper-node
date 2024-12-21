@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 ///     KeepUp --> Validate
 ///     Validate --> KeepUp
 ///     CatchUp --> ShutdownForUpgrade
+///     CatchUp --> ShutdownAfterCatchingUp
 ///     KeepUp --> ShutdownForUpgrade
 ///     Validate --> ShutdownForUpgrade
 ///     CatchUp --> Upgrading
@@ -70,4 +71,6 @@ pub enum ReactorState {
     Validate,
     /// Node should be shut down for upgrade.
     ShutdownForUpgrade,
+    /// Node should shut down after catching up.
+    ShutdownAfterCatchingUp,
 }
