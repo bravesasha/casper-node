@@ -74,18 +74,15 @@ impl codec::Decoder for BinaryMessageCodec {
     type Error = Error;
 
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (length, have_full_frame) = if let [b1, b2, b3, b4, remainder @ ..] = &src[..] {
-            let length = LengthEncoding::from_le_bytes([*b1, *b2, *b3, *b4]) as usize;
-            (length, remainder.len() >= length)
-        } else {
-            // Not enough bytes to read the length.
-            return Ok(None);
-        };
-
-        if !have_full_frame {
-            // Not enough bytes to read the whole message.
-            return Ok(None);
-        };
+        let (length, remainder_length, have_full_frame) =
+            if let [b1, b2, b3, b4, remainder @ ..] = &src[..] {
+                let length = LengthEncoding::from_le_bytes([*b1, *b2, *b3, *b4]) as usize;
+                let remainder_length = remainder.len();
+                (length, remainder_length, remainder_length >= length)
+            } else {
+                // Not enough bytes to read the length.
+                return Ok(None);
+            };
 
         if length > self.max_message_size_bytes as usize {
             return Err(Error::RequestTooLarge {
@@ -93,6 +90,21 @@ impl codec::Decoder for BinaryMessageCodec {
                 got: length as u32,
             });
         }
+
+        if remainder_length > self.max_message_size_bytes as usize {
+            return Err(Error::RequestTooLarge {
+                allowed: self.max_message_size_bytes,
+                got: remainder_length as u32, /* remainder_length can technically be bigger than
+                                               * u32, but defaulting to 0 in that case is good
+                                               * enough */
+            });
+        }
+
+        if !have_full_frame {
+            // Not enough bytes to read the whole message.
+            return Ok(None);
+        };
+
         if length == 0 {
             return Err(Error::EmptyRequest);
         }
@@ -246,27 +258,50 @@ mod tests {
     #[test]
     fn should_decoded_queued_messages() {
         let rng = &mut TestRng::new();
-        let count = rng.gen_range(10000..20000);
-        let messages = (0..count)
-            .map(|_| BinaryMessage::random(rng))
-            .collect::<Vec<_>>();
-        let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
-        let mut bytes = bytes::BytesMut::new();
-        for msg in &messages {
-            codec
-                .encode(msg.clone(), &mut bytes)
-                .expect("should encode");
-        }
-
-        let mut decoded_messages = vec![];
-        loop {
-            let maybe_message = codec.decode(&mut bytes).expect("should decode");
-            match maybe_message {
-                Some(message) => decoded_messages.push(message),
-                None => break,
+        let number_of_loops = rng.gen_range(100..200);
+        for _ in 0..number_of_loops {
+            let count = rng.gen_range(100..200);
+            let messages = (0..count)
+                .map(|_| BinaryMessage::random(rng))
+                .collect::<Vec<_>>();
+            let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
+            let mut bytes = bytes::BytesMut::new();
+            for msg in &messages {
+                codec
+                    .encode(msg.clone(), &mut bytes)
+                    .expect("should encode");
             }
+            let mut decoded_messages = vec![];
+            loop {
+                let maybe_message = codec.decode(&mut bytes).expect("should decode");
+                match maybe_message {
+                    Some(message) => decoded_messages.push(message),
+                    None => break,
+                }
+            }
+            assert_eq!(messages, decoded_messages);
         }
+    }
 
-        assert_eq!(messages, decoded_messages);
+    #[test]
+    fn should_not_decode_when_read_bytes_extend_max() {
+        const MAX_MESSAGE_BYTES: usize = 1000;
+        let rng = &mut TestRng::new();
+        let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_BYTES as u32);
+        let mut bytes = bytes::BytesMut::new();
+        let some_length = MAX_MESSAGE_BYTES as LengthEncoding; //This value doesn't match the
+                                                               // length of mock_bytes intentionally so we can be sure at what point did the encoder bail -
+                                                               // we want to ensure that the encoder doesn't read the whole message before it bails
+        bytes.extend(&some_length.to_le_bytes());
+        bytes.extend(std::iter::repeat_with(|| rng.gen::<u8>()).take(MAX_MESSAGE_BYTES * 3));
+
+        let message_res = codec.decode(&mut bytes);
+        assert!(message_res.is_err());
+        let err = message_res.err().unwrap();
+        assert!(matches!(
+            err,
+            Error::RequestTooLarge { allowed, got}
+            if allowed == MAX_MESSAGE_BYTES as u32 && got == MAX_MESSAGE_BYTES as u32 * 3,
+        ))
     }
 }
