@@ -2017,7 +2017,7 @@ impl<REv> EffectBuilder<REv> {
             QueryResult::ValueNotFound(_) => {
                 let query_request =
                     QueryRequest::new(state_root_hash, Key::SmartContract(package_addr), vec![]);
-                error!("requesting under different key");
+                debug!("requesting under different key");
                 if let QueryResult::Success { value, .. } =
                     self.query_global_state(query_request).await
                 {

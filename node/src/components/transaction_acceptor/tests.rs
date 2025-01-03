@@ -2360,7 +2360,6 @@ async fn should_reject_transaction_v1_with_missing_version_in_session_contract_p
         ContractPackageScenario::MissingContractVersion,
     );
     let result = run_transaction_acceptor(test_scenario).await;
-    println!("{:?}", result);
     assert!(matches!(
         result,
         Err(super::Error::Parameters {
