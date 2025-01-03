@@ -17,7 +17,7 @@ use casper_types::{
     account::AccountHash, addressable_entity::AddressableEntity, system::auction::ARG_AMOUNT,
     AddressableEntityHash, AddressableEntityIdentifier, BlockHeader, Chainspec, EntityAddr,
     EntityKind, EntityVersion, EntityVersionKey, ExecutableDeployItem,
-    ExecutableDeployItemIdentifier, InitiatorAddr, Key, Package, PackageAddr, PackageHash,
+    ExecutableDeployItemIdentifier, InitiatorAddr, Package, PackageAddr, PackageHash,
     PackageIdentifier, Timestamp, Transaction, TransactionEntryPoint, TransactionInvocationTarget,
     TransactionTarget, DEFAULT_ENTRY_POINT_NAME, U512,
 };
@@ -365,10 +365,9 @@ impl TransactionAcceptor {
             ExecutableDeployItemIdentifier::Package(
                 ref contract_package_identifier @ PackageIdentifier::Hash { package_hash, .. },
             ) => {
-                let key = Key::from(package_hash);
                 let maybe_package_version = contract_package_identifier.version();
                 effect_builder
-                    .get_package(*block_header.state_root_hash(), key)
+                    .get_package(*block_header.state_root_hash(), package_hash.value())
                     .event(move |maybe_package| Event::GetPackageResult {
                         event_metadata,
                         block_header,
@@ -481,10 +480,9 @@ impl TransactionAcceptor {
             ExecutableDeployItemIdentifier::Package(
                 ref package_identifier @ PackageIdentifier::Hash { package_hash, .. },
             ) => {
-                let key = Key::from(package_hash);
                 let maybe_package_version = package_identifier.version();
                 effect_builder
-                    .get_package(*block_header.state_root_hash(), key)
+                    .get_package(*block_header.state_root_hash(), package_hash.value())
                     .event(move |maybe_package| Event::GetPackageResult {
                         event_metadata,
                         block_header,
@@ -555,19 +553,16 @@ impl TransactionAcceptor {
                         maybe_entity: result.into_option(),
                     })
             }
-            NextStep::GetPackage(package_addr, maybe_package_version) => {
-                let key = Key::SmartContract(package_addr);
-                effect_builder
-                    .get_package(*block_header.state_root_hash(), key)
-                    .event(move |maybe_package| Event::GetPackageResult {
-                        event_metadata,
-                        block_header,
-                        is_payment: false,
-                        package_hash: PackageHash::new(package_addr),
-                        maybe_package_version,
-                        maybe_package,
-                    })
-            }
+            NextStep::GetPackage(package_addr, maybe_package_version) => effect_builder
+                .get_package(*block_header.state_root_hash(), package_addr)
+                .event(move |maybe_package| Event::GetPackageResult {
+                    event_metadata,
+                    block_header,
+                    is_payment: false,
+                    package_hash: PackageHash::new(package_addr),
+                    maybe_package_version,
+                    maybe_package,
+                }),
             NextStep::CryptoValidation => {
                 self.validate_transaction_cryptography(effect_builder, event_metadata)
             }

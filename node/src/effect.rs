@@ -134,8 +134,8 @@ use casper_types::{
     Approval, AvailableBlockRange, Block, BlockHash, BlockHeader, BlockSignatures,
     BlockSynchronizerStatus, BlockV2, ChainspecRawBytes, DeployHash, Digest, EntityAddr, EraId,
     ExecutionInfo, FinalitySignature, FinalitySignatureId, FinalitySignatureV2, HashAddr, Key,
-    NextUpgrade, Package, ProtocolUpgradeConfig, PublicKey, TimeDiff, Timestamp, Transaction,
-    TransactionHash, TransactionId, Transfer, U512,
+    NextUpgrade, Package, PackageAddr, ProtocolUpgradeConfig, PublicKey, TimeDiff, Timestamp,
+    Transaction, TransactionHash, TransactionId, Transfer, U512,
 };
 
 use crate::{
@@ -2001,16 +2001,35 @@ impl<REv> EffectBuilder<REv> {
     }
 
     /// Retrieves a `Package` from under the given key in global state if present.
-    pub(crate) async fn get_package(self, state_root_hash: Digest, key: Key) -> Option<Box<Package>>
+    pub(crate) async fn get_package(
+        self,
+        state_root_hash: Digest,
+        package_addr: PackageAddr,
+    ) -> Option<Box<Package>>
     where
         REv: From<ContractRuntimeRequest>,
     {
+        let key = Key::Hash(package_addr);
         let query_request = QueryRequest::new(state_root_hash, key, vec![]);
 
-        if let QueryResult::Success { value, .. } = self.query_global_state(query_request).await {
-            value.into_package().map(Box::new)
-        } else {
-            None
+        match self.query_global_state(query_request).await {
+            QueryResult::RootNotFound | QueryResult::Failure(_) => None,
+            QueryResult::ValueNotFound(_) => {
+                let query_request =
+                    QueryRequest::new(state_root_hash, Key::SmartContract(package_addr), vec![]);
+                error!("requesting under different key");
+                if let QueryResult::Success { value, .. } =
+                    self.query_global_state(query_request).await
+                {
+                    value.into_package().map(Box::new)
+                } else {
+                    None
+                }
+            }
+            QueryResult::Success { value, .. } => value
+                .into_contract_package()
+                .map(Package::from)
+                .map(Box::new),
         }
     }
 
