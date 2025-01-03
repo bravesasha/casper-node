@@ -32,11 +32,11 @@ use casper_types::{
     account::{Account, AccountHash, ActionThresholds, AssociatedKeys, Weight},
     addressable_entity::AddressableEntity,
     bytesrepr::Bytes,
-    contracts::NamedKeys,
+    contracts::{ContractPackage, NamedKeys},
     global_state::TrieMerkleProof,
     testing::TestRng,
     Block, BlockV2, CLValue, Chainspec, ChainspecRawBytes, Contract, Deploy, EraId, HashAddr,
-    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Package, PricingHandling, PricingMode,
+    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Key, PricingHandling, PricingMode,
     ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp,
     Transaction, TransactionArgs, TransactionConfig, TransactionRuntimeParams, TransactionV1, URef,
     U512,
@@ -826,44 +826,47 @@ impl reactor::Reactor for Reactor {
                     request: query_request,
                     responder,
                 } => {
-                    let query_result = if let Key::SmartContract(_) = query_request.key() {
-                        match self.test_scenario {
-                            TestScenario::FromPeerCustomPaymentContractPackage(
-                                ContractPackageScenario::MissingPackageAtHash,
-                            )
-                            | TestScenario::FromPeerSessionContractPackage(
-                                _,
-                                ContractPackageScenario::MissingPackageAtHash,
-                            )
-                            | TestScenario::FromClientCustomPaymentContractPackage(
-                                ContractPackageScenario::MissingPackageAtHash,
-                            )
-                            | TestScenario::FromClientSessionContractPackage(
-                                _,
-                                ContractPackageScenario::MissingPackageAtHash,
-                            ) => QueryResult::ValueNotFound(String::new()),
-                            TestScenario::FromPeerCustomPaymentContractPackage(
-                                ContractPackageScenario::MissingContractVersion,
-                            )
-                            | TestScenario::FromPeerSessionContractPackage(
-                                _,
-                                ContractPackageScenario::MissingContractVersion,
-                            )
-                            | TestScenario::FromClientCustomPaymentContractPackage(
-                                ContractPackageScenario::MissingContractVersion,
-                            )
-                            | TestScenario::FromClientSessionContractPackage(
-                                _,
-                                ContractPackageScenario::MissingContractVersion,
-                            ) => QueryResult::Success {
-                                value: Box::new(StoredValue::SmartContract(Package::default())),
-                                proofs: vec![],
-                            },
-                            _ => panic!("unexpected query: {:?}", query_request),
-                        }
-                    } else {
-                        panic!("expect only queries using Key::Package variant");
-                    };
+                    let query_result =
+                        if let Key::Hash(_) | Key::SmartContract(_) = query_request.key() {
+                            match self.test_scenario {
+                                TestScenario::FromPeerCustomPaymentContractPackage(
+                                    ContractPackageScenario::MissingPackageAtHash,
+                                )
+                                | TestScenario::FromPeerSessionContractPackage(
+                                    _,
+                                    ContractPackageScenario::MissingPackageAtHash,
+                                )
+                                | TestScenario::FromClientCustomPaymentContractPackage(
+                                    ContractPackageScenario::MissingPackageAtHash,
+                                )
+                                | TestScenario::FromClientSessionContractPackage(
+                                    _,
+                                    ContractPackageScenario::MissingPackageAtHash,
+                                ) => QueryResult::ValueNotFound(String::new()),
+                                TestScenario::FromPeerCustomPaymentContractPackage(
+                                    ContractPackageScenario::MissingContractVersion,
+                                )
+                                | TestScenario::FromPeerSessionContractPackage(
+                                    _,
+                                    ContractPackageScenario::MissingContractVersion,
+                                )
+                                | TestScenario::FromClientCustomPaymentContractPackage(
+                                    ContractPackageScenario::MissingContractVersion,
+                                )
+                                | TestScenario::FromClientSessionContractPackage(
+                                    _,
+                                    ContractPackageScenario::MissingContractVersion,
+                                ) => QueryResult::Success {
+                                    value: Box::new(StoredValue::ContractPackage(
+                                        ContractPackage::default(),
+                                    )),
+                                    proofs: vec![],
+                                },
+                                _ => panic!("unexpected query: {:?}", query_request),
+                            }
+                        } else {
+                            panic!("expect only queries using Key::Package variant");
+                        };
                     responder.respond(query_result).ignore()
                 }
                 ContractRuntimeRequest::GetBalance {
