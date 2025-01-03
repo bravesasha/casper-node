@@ -1876,7 +1876,6 @@ async fn should_reject_deploy_with_missing_version_in_payment_contract_package_f
         ContractPackageScenario::MissingContractVersion,
     );
     let result = run_transaction_acceptor(test_scenario).await;
-    println!("{:?}", result);
     assert!(matches!(
         result,
         Err(super::Error::Parameters {
