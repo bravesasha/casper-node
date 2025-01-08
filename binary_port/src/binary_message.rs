@@ -91,7 +91,10 @@ impl codec::Decoder for BinaryMessageCodec {
             });
         }
 
-        if remainder_length > self.max_message_size_bytes as usize {
+        if remainder_length > length {
+            // Someone tries to sneak more data than declared. The client should only send one
+            // message at a time, wait for a response, then proceed to the next message
+            // We also don't want to expose
             return Err(Error::RequestTooLarge {
                 allowed: self.max_message_size_bytes,
                 got: remainder_length as u32, /* remainder_length can technically be bigger than
@@ -179,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn should_leave_remainder_in_buffer() {
+    fn should_reject_if_remainder_bytes_present() {
         let rng = &mut TestRng::new();
         let val = BinaryMessage::random(rng);
         let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
@@ -188,10 +191,10 @@ mod tests {
         let suffix = bytes::Bytes::from_static(b"suffix");
         bytes.extend(&suffix);
 
-        let _ = codec.decode(&mut bytes);
+        let r = codec.decode(&mut bytes);
 
-        // Ensure that the bytes are not consumed.
-        assert_eq!(bytes, suffix);
+        // Piggy backing bytes after the message shouldn't be allowed.
+        assert!(matches!(r, Err(Error::RequestTooLarge { .. })));
     }
 
     #[test]
@@ -256,30 +259,18 @@ mod tests {
     }
 
     #[test]
-    fn should_decoded_queued_messages() {
+    fn should_decode_random_messages() {
         let rng = &mut TestRng::new();
-        let number_of_loops = rng.gen_range(100..200);
+        let number_of_loops = rng.gen_range(10000..20000);
         for _ in 0..number_of_loops {
-            let count = rng.gen_range(100..200);
-            let messages = (0..count)
-                .map(|_| BinaryMessage::random(rng))
-                .collect::<Vec<_>>();
+            let msg = BinaryMessage::random(rng);
             let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
             let mut bytes = bytes::BytesMut::new();
-            for msg in &messages {
-                codec
-                    .encode(msg.clone(), &mut bytes)
-                    .expect("should encode");
-            }
-            let mut decoded_messages = vec![];
-            loop {
-                let maybe_message = codec.decode(&mut bytes).expect("should decode");
-                match maybe_message {
-                    Some(message) => decoded_messages.push(message),
-                    None => break,
-                }
-            }
-            assert_eq!(messages, decoded_messages);
+            codec
+                .encode(msg.clone(), &mut bytes)
+                .expect("should encode");
+            let decoded_message = codec.decode(&mut bytes).expect("should decode");
+            assert_eq!(msg, decoded_message.unwrap());
         }
     }
 
