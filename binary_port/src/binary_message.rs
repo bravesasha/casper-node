@@ -74,32 +74,19 @@ impl codec::Decoder for BinaryMessageCodec {
     type Error = Error;
 
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (length, remainder_length, have_full_frame) =
-            if let [b1, b2, b3, b4, remainder @ ..] = &src[..] {
-                let length = LengthEncoding::from_le_bytes([*b1, *b2, *b3, *b4]) as usize;
-                let remainder_length = remainder.len();
-                (length, remainder_length, remainder_length >= length)
-            } else {
-                // Not enough bytes to read the length.
-                return Ok(None);
-            };
+        let (length, have_full_frame) = if let [b1, b2, b3, b4, remainder @ ..] = &src[..] {
+            let length = LengthEncoding::from_le_bytes([*b1, *b2, *b3, *b4]) as usize;
+            let remainder_length = remainder.len();
+            (length, remainder_length >= length)
+        } else {
+            // Not enough bytes to read the length.
+            return Ok(None);
+        };
 
         if length > self.max_message_size_bytes as usize {
             return Err(Error::RequestTooLarge {
                 allowed: self.max_message_size_bytes,
                 got: length as u32,
-            });
-        }
-
-        if remainder_length > length {
-            // Someone tries to sneak more data than declared. The client should only send one
-            // message at a time, wait for a response, then proceed to the next message
-            // We also don't want to expose
-            return Err(Error::RequestTooLarge {
-                allowed: self.max_message_size_bytes,
-                got: remainder_length as u32, /* remainder_length can technically be bigger than
-                                               * u32, but defaulting to 0 in that case is good
-                                               * enough */
             });
         }
 
@@ -182,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn should_reject_if_remainder_bytes_present() {
+    fn should_leave_remainder_in_buffer() {
         let rng = &mut TestRng::new();
         let val = BinaryMessage::random(rng);
         let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
@@ -191,10 +178,9 @@ mod tests {
         let suffix = bytes::Bytes::from_static(b"suffix");
         bytes.extend(&suffix);
 
-        let r = codec.decode(&mut bytes);
-
-        // Piggy backing bytes after the message shouldn't be allowed.
-        assert!(matches!(r, Err(Error::RequestTooLarge { .. })));
+        let _ = codec.decode(&mut bytes);
+        // Ensure that the bytes are not consumed.
+        assert_eq!(bytes, suffix);
     }
 
     #[test]
@@ -259,18 +245,30 @@ mod tests {
     }
 
     #[test]
-    fn should_decode_random_messages() {
+    fn should_decoded_queued_messages() {
         let rng = &mut TestRng::new();
-        let number_of_loops = rng.gen_range(10000..20000);
+        let number_of_loops = rng.gen_range(100..200);
         for _ in 0..number_of_loops {
-            let msg = BinaryMessage::random(rng);
+            let count = rng.gen_range(100..200);
+            let messages = (0..count)
+                .map(|_| BinaryMessage::random(rng))
+                .collect::<Vec<_>>();
             let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
             let mut bytes = bytes::BytesMut::new();
-            codec
-                .encode(msg.clone(), &mut bytes)
-                .expect("should encode");
-            let decoded_message = codec.decode(&mut bytes).expect("should decode");
-            assert_eq!(msg, decoded_message.unwrap());
+            for msg in &messages {
+                codec
+                    .encode(msg.clone(), &mut bytes)
+                    .expect("should encode");
+            }
+            let mut decoded_messages = vec![];
+            loop {
+                let maybe_message = codec.decode(&mut bytes).expect("should decode");
+                match maybe_message {
+                    Some(message) => decoded_messages.push(message),
+                    None => break,
+                }
+            }
+            assert_eq!(messages, decoded_messages);
         }
     }
 
