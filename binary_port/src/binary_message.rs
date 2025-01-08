@@ -276,9 +276,9 @@ mod tests {
         let rng = &mut TestRng::new();
         let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_BYTES as u32);
         let mut bytes = bytes::BytesMut::new();
-        let some_length = MAX_MESSAGE_BYTES as LengthEncoding; //This value doesn't match the
-                                                               // length of mock_bytes intentionally so we can be sure at what point did the encoder bail -
-                                                               // we want to ensure that the encoder doesn't read the whole message before it bails
+        let some_length = (MAX_MESSAGE_BYTES * 2_usize) as LengthEncoding; //This value doesn't match the
+                                                                           // length of mock_bytes intentionally so we can be sure at what point did the encoder bail -
+                                                                           // we want to ensure that the encoder doesn't read the whole message before it bails
         bytes.extend(&some_length.to_le_bytes());
         bytes.extend(std::iter::repeat_with(|| rng.gen::<u8>()).take(MAX_MESSAGE_BYTES * 3));
 
@@ -288,7 +288,7 @@ mod tests {
         assert!(matches!(
             err,
             Error::RequestTooLarge { allowed, got}
-            if allowed == MAX_MESSAGE_BYTES as u32 && got == MAX_MESSAGE_BYTES as u32 * 3,
+            if allowed == MAX_MESSAGE_BYTES as u32 && got == MAX_MESSAGE_BYTES as u32 * 2,
         ))
     }
 }
