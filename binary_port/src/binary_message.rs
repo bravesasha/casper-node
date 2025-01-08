@@ -247,29 +247,27 @@ mod tests {
     #[test]
     fn should_decoded_queued_messages() {
         let rng = &mut TestRng::new();
-        let number_of_loops = rng.gen_range(100..200);
-        for _ in 0..number_of_loops {
-            let count = rng.gen_range(100..200);
-            let messages = (0..count)
-                .map(|_| BinaryMessage::random(rng))
-                .collect::<Vec<_>>();
-            let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
-            let mut bytes = bytes::BytesMut::new();
-            for msg in &messages {
-                codec
-                    .encode(msg.clone(), &mut bytes)
-                    .expect("should encode");
-            }
-            let mut decoded_messages = vec![];
-            loop {
-                let maybe_message = codec.decode(&mut bytes).expect("should decode");
-                match maybe_message {
-                    Some(message) => decoded_messages.push(message),
-                    None => break,
-                }
-            }
-            assert_eq!(messages, decoded_messages);
+        let count = rng.gen_range(10000..20000);
+        let messages = (0..count)
+            .map(|_| BinaryMessage::random(rng))
+            .collect::<Vec<_>>();
+        let mut codec = BinaryMessageCodec::new(MAX_MESSAGE_SIZE_BYTES);
+        let mut bytes = bytes::BytesMut::new();
+        for msg in &messages {
+            codec
+                .encode(msg.clone(), &mut bytes)
+                .expect("should encode");
         }
+
+        let mut decoded_messages = vec![];
+        loop {
+            let maybe_message = codec.decode(&mut bytes).expect("should decode");
+            match maybe_message {
+                Some(message) => decoded_messages.push(message),
+                None => break,
+            }
+        }
+        assert_eq!(messages, decoded_messages);
     }
 
     #[test]
