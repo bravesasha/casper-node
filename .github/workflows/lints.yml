@@ -80,4 +80,6 @@ jobs:
         run: make doc
 
       - name: audit
-        run: make audit
+        run: |
+          cargo install cargo-audit --locked
+          make audit

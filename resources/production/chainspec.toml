@@ -218,7 +218,8 @@ install_upgrade_lane = [2, 750_000, 2048, 100_000_000_000, 1]
 wasm_lanes = [
     [3, 262_144, 1024, 100_000_000_000, 1],
     [4, 131_072, 1024, 50_000_000_000, 2],
-    [5, 16_384, 512, 2_500_000_000, 80]]
+    [5, 65_536, 512, 3_000_000_000, 80]
+]
 
 [transactions.deploy]
 # The maximum number of Motes allowed to be spent during payment.  0 means unlimited.
